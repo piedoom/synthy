@@ -158,7 +158,7 @@ impl Default for Synthy {
         let a_env_tag = || tag(Tag::OpAEnv as i64, 0.);
         let b_env_tag = || tag(Tag::OpBEnv as i64, 0.);
         let noise_env_tag = || tag(Tag::NoiseEnv as i64, 0.);
-        let env_tag = || tag(Tag::Env as i64, 0.);
+        let env_tag = || tag(Tag::Env as i64, 0.) >> !declick();
         let b_mod_tag = || tag(Tag::OpBMod as i64, 0.);
         let a_b_mod_tag = || tag(Tag::OpAModB as i64, 0.);
 
@@ -222,61 +222,76 @@ impl Plugin for Synthy {
                 .set(Tag::FilterQ as i64, self.params.filter_q.value as f64);
 
             let midi = context.next_midi_event();
+            if let Some(event) = midi {
+                match event {
+                    NoteEvent::NoteOn { note, velocity, .. } => {
+                        self.enabled = true;
+                        self.audio
+                            .set(Tag::Freq as i64, midi_note_to_freq(note) as f64);
 
-            if let Some(note) = &midi {
-                if let NoteEvent::NoteOn { note, velocity, .. } = note {
-                    self.audio
-                        .set(Tag::Freq as i64, midi_note_to_freq(*note) as f64);
-                    self.enabled = true;
-                    self.note = Some(NoteInfo {
-                        note: *note,
-                        velocity: *velocity,
-                        on: self.time,
-                        stage: 0,
-                    });
+                        self.note = Some(NoteInfo {
+                            note,
+                            velocity,
+                            on: self.time,
+                            stage: 0,
+                        });
+                    }
+                    NoteEvent::NoteOff { note, velocity, .. } => {
+                        if let Some(current_note) = &mut self.note {
+                            let params = self.params.env.read().unwrap();
+                            if current_note.note == note {
+                                current_note.velocity = velocity;
+                                current_note.stage = params.len() - 2;
+                                if let Ok(params) = self.params.env.read() {
+                                    // TODO: figure out how to offset the time here
+                                    // current_note.on = Duration::from_secs_f32(
+
+                                    //     // current_note.on.as_secs_f32()
+                                    //     //     - (params.last().unwrap().0
+                                    //     //         - params
+                                    //     //             .get(params.len() - 2)
+                                    //     //             .unwrap()
+                                    //     //             .0
+                                    //     //             .min(0f32))),
+                                    // );
+                                }
+                            }
+                        }
+                        if Some(note) == self.note.as_ref().map(|x| x.note) {}
+                    }
                 }
             }
 
-            // get the envelope amplitude at this position in time
-            let mut set_env = |param: &RwLock<Vec<(f32, f32)>>, tag| {
-                if let Ok(env_amp) = param.read() {
-                    if let Some(note) = &mut self.note {
-                        // check if we need to bump the note index
-                        let relative_time = self.time - note.on;
-                        let next_point = env_amp
-                            .get(note.stage + 1)
-                            .unwrap_or_else(|| env_amp.last().unwrap());
+            // Calculate main env notes on and off
+            if let Ok(envelope) = self.params.env.read() {
+                if let Some(note) = &mut self.note {
+                    let relative_time = self.time - note.on;
+                    // increase the point counter if more than the next point
+                    if let Some(next_point) = envelope.get(note.stage + 1) {
                         if relative_time.as_secs_f32() >= next_point.0 {
-                            // Increment the stage
                             note.stage += 1;
                         }
+                    }
+                    if note.stage == envelope.len() {
+                        // We have reached the end of the envelope. Trigger a note off
+                        self.note = None;
+                    }
+                }
+            }
 
-                        // set to release envelope
-                        if let Some(NoteEvent::NoteOff {
-                            timing,
-                            channel,
-                            note: current_note,
-                            velocity,
-                        }) = midi
+            // lerp between the two points based on note stage
+            let mut set_env = |param: &RwLock<Vec<(f32, f32)>>, tag| {
+                if let Some(note) = &self.note {
+                    let relative_time = self.time - note.on;
+                    if let Ok(envelope) = param.read() {
+                        if let (Some(left), Some(right)) =
+                            (envelope.get(note.stage), envelope.get(note.stage + 1))
                         {
-                            if current_note == note.note {
-                                // set to second to last for release
-                                note.stage = env_amp.len() - 2;
-                            }
+                            let normalized =
+                                (relative_time.as_secs_f32() - left.0) / (right.0 - left.0);
+                            let val = lerp(left.1, right.1, normalized);
+                            self.audio.set(tag as i64, val as f64);
                         }
-
-                        let left = env_amp
-                            .get(note.stage)
-                            .unwrap_or_else(|| env_amp.last().unwrap());
-                        let right = env_amp
-                            .get(note.stage + 1)
-                            .unwrap_or_else(|| env_amp.last().unwrap());
-
-                        let normalized =
-                            (relative_time.as_secs_f32() - left.0) / (right.0 - left.0);
-
-                        let val = lerp(left.1, right.1, normalized);
-                        self.audio.set(tag as i64, val as f64);
                     }
                 }
             };
@@ -285,6 +300,69 @@ impl Plugin for Synthy {
             set_env(&self.params.b_env, Tag::OpBEnv);
             set_env(&self.params.noise_env, Tag::NoiseEnv);
             set_env(&self.params.env, Tag::Env);
+
+            // if let Some(note) = &midi {
+            //     if let NoteEvent::NoteOn { note, velocity, .. } = note {
+            //         self.audio
+            //             .set(Tag::Freq as i64, midi_note_to_freq(*note) as f64);
+            //         self.enabled = true;
+            //         self.note = Some(NoteInfo {
+            //             note: *note,
+            //             velocity: *velocity,
+            //             on: self.time,
+            //             stage: 0,
+            //         });
+            //     }
+            // }
+
+            // // get the envelope amplitude at this position in time
+            // let mut set_env = |param: &RwLock<Vec<(f32, f32)>>, tag| {
+            //     if let Ok(env_amp) = param.read() {
+            //         if let Some(note) = &mut self.note {
+            //             // check if we need to bump the note index
+            //             let relative_time = self.time - note.on;
+            //             let next_point = env_amp
+            //                 .get(note.stage + 1)
+            //                 .unwrap_or_else(|| env_amp.last().unwrap());
+            //             if relative_time.as_secs_f32() >= next_point.0 {
+            //                 // Increment the stage
+            //                 note.stage += 1;
+            //             }
+
+            //             // set to release envelope
+            //             if let Some(NoteEvent::NoteOff {
+            //                 timing,
+            //                 channel,
+            //                 note: current_note,
+            //                 velocity,
+            //             }) = midi
+            //             {
+            //                 if current_note == note.note {
+            //                     // set to second to last for release
+            //                     note.stage = env_amp.len() - 2;
+            //                 }
+            //             }
+
+            //             let left = env_amp
+            //                 .get(note.stage)
+            //                 .unwrap_or_else(|| env_amp.last().unwrap());
+            //             let right = env_amp
+            //                 .get(note.stage + 1)
+            //                 .unwrap_or_else(|| env_amp.last().unwrap());
+
+            //             let normalized =
+            //                 (relative_time.as_secs_f32() - left.0) / (right.0 - left.0);
+
+            //             let val = lerp(left.1, right.1, normalized);
+            //             self.audio.set(tag as i64, val as f64);
+            //         }
+            //     }
+            // };
+
+            //
+            //
+            //
+            //
 
             let mut left_tmp = [0f64; MAX_BUFFER_SIZE];
             let mut right_tmp = [0f64; MAX_BUFFER_SIZE];
