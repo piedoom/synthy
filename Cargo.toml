@@ -17,10 +17,9 @@ num-traits = "0.2"
 wmidi = "4"
 dirs = "4"
 
-egui = "0.17"
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug", features = ["assert_process_allocs"] }
-nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug" }
 lyon_geom = "0.17"
 baseview = { git = "https://github.com/RustAudio/baseview.git", rev = "f6e99e9aa6f5aeb6b721cb05e4d882a51d995909"}
 raw-window-handle = "0.4"
 atomic_float = "0.1"
+vizia = { git = "https://github.com/vizia/vizia", features = ["baseview"], default-features = false }

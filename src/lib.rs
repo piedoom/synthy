@@ -1,11 +1,10 @@
 #![feature(trait_alias)]
+pub mod editor;
 pub mod ui;
-pub mod widgets;
 
-use egui::Vec2;
+use editor::create_vizia_editor;
 use fundsp::hacker::*;
 use nih_plug::{nih_export_vst3, prelude::*, util::midi_note_to_freq};
-use nih_plug_egui::EguiState;
 use num_derive::FromPrimitive;
 use std::{
     pin::Pin,
@@ -24,7 +23,6 @@ struct Synthy {
     time: Duration,
     note: Option<NoteInfo>,
     enabled: bool,
-    editor: Arc<EguiState>,
 }
 
 struct NoteInfo {
@@ -186,7 +184,6 @@ impl Default for Synthy {
             note: None,
             enabled: false,
             params,
-            editor: EguiState::from_size(300, 500),
         }
     }
 }
@@ -336,11 +333,9 @@ impl Plugin for Synthy {
 
     fn editor(&self) -> Option<Box<dyn Editor>> {
         let params = self.params.clone();
-        nih_plug_egui::create_egui_editor(
-            self.editor.clone(),
-            (),
-            move |egui_ctx, setter, _state| ui::ui(egui_ctx, params.clone(), setter),
-        )
+        create_vizia_editor(move |cx, context| {
+            ui::ui(cx, params.clone(), context.clone());
+        })
     }
 }
 

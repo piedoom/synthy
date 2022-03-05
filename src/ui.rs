@@ -1,44 +1,6 @@
-use crate::{widgets::*, SynthyParams};
-use egui::{style::Margin, Context};
+use crate::SynthyParams;
 use nih_plug::prelude::*;
 use std::{pin::Pin, sync::Arc};
+use vizia::Context;
 
-#[inline]
-pub(crate) fn ui(egui_ctx: &Context, params: Pin<Arc<SynthyParams>>, setter: &ParamSetter) {
-    let margin = 16f32;
-    egui::CentralPanel::default()
-        .frame(
-            egui::Frame::default()
-                .fill(crate::widgets::Theme::default().colors.background)
-                .margin(Margin::symmetric(margin, margin)),
-        )
-        .show(egui_ctx, |ui| {
-            ui.vertical(|ui| {
-                ui.add(
-                    Envelope::from_param(&params.env, "envelope")
-                        .size(egui::Vec2::new(ui.available_size().x, 200f32)),
-                );
-                ui.horizontal(|ui| {
-                    ui.add(Knob::from_param(&params.a_mod, setter));
-                    ui.add_space(margin);
-                    ui.add(Slider::from_param(&params.a_ratio, setter));
-                });
-                ui.add_space(margin);
-                ui.separator();
-                ui.add_space(margin);
-                ui.horizontal(|ui| {
-                    ui.add(Slider::from_param(&params.b_mod, setter).vertical());
-                    ui.add_space(margin);
-                    ui.add(Knob::from_param(&params.b_ratio, setter));
-                });
-                ui.add_space(margin);
-                ui.separator();
-                ui.add_space(margin);
-                ui.add(
-                    Knob::from_param(&params.noise_amp, setter)
-                        .show_value_normalized(true)
-                        .width(32f32),
-                );
-            });
-        });
-}
+pub(crate) fn ui(cx: &mut Context, params: Pin<Arc<SynthyParams>>, context: Arc<dyn GuiContext>) {}
