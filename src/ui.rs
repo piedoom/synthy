@@ -14,31 +14,54 @@ pub(crate) fn ui(egui_ctx: &Context, params: Pin<Arc<SynthyParams>>, setter: &Pa
         )
         .show(egui_ctx, |ui| {
             ui.vertical(|ui| {
-                ui.add(
-                    Envelope::from_param(&params.env, "envelope")
-                        .size(egui::Vec2::new(ui.available_size().x, 200f32)),
-                );
                 ui.horizontal(|ui| {
-                    ui.add(Knob::from_param(&params.a_mod, setter));
+                    ui.horizontal(|ui| {
+                        ui.add(Knob::from_param(&params.a_mod, setter));
+                        ui.add_space(margin);
+                        ui.add(Knob::from_param(&params.a_ratio, setter));
+                    });
                     ui.add_space(margin);
-                    ui.add(Slider::from_param(&params.a_ratio, setter));
+                    ui.add(
+                        Envelope::from_param(&params.a_env, "op a envelope")
+                            .size(ui.available_size()),
+                    );
                 });
+
                 ui.add_space(margin);
                 ui.separator();
                 ui.add_space(margin);
+
                 ui.horizontal(|ui| {
-                    ui.add(Slider::from_param(&params.b_mod, setter).vertical());
+                    ui.horizontal(|ui| {
+                        ui.add(Knob::from_param(&params.b_mod, setter));
+                        ui.add_space(margin);
+                        ui.add(Knob::from_param(&params.b_ratio, setter));
+                    });
                     ui.add_space(margin);
-                    ui.add(Knob::from_param(&params.b_ratio, setter));
+                    ui.add(
+                        Envelope::from_param(&params.b_env, "op b envelope")
+                            .size(ui.available_size()),
+                    );
                 });
+
                 ui.add_space(margin);
                 ui.separator();
                 ui.add_space(margin);
-                ui.add(
-                    Knob::from_param(&params.noise_amp, setter)
-                        .show_value_normalized(true)
-                        .width(32f32),
-                );
+
+                ui.horizontal(|ui| {
+                    ui.add(Slider::from_param(&params.noise_amp, setter));
+                    ui.add_space(margin);
+                    ui.add(
+                        Envelope::from_param(&params.noise_env, "noise envelope")
+                            .size(ui.available_size()),
+                    );
+                });
+
+                ui.add_space(margin);
+                ui.separator();
+                ui.add_space(margin);
+
+                ui.add(Envelope::from_param(&params.env, "envelope").size(ui.available_size()));
             });
         });
 }
