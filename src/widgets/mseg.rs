@@ -21,39 +21,42 @@ where
     points: L,
 }
 
-#[derive(Clone, Debug, Data)]
-pub struct MsegDataInternal {
-    pub range: RangeInclusive<f32>,
-}
+// #[derive(Clone, Debug, Data)]
+// pub struct MsegDataInternal {
+//     pub range: RangeInclusive<f32>,
+// }
 
-impl Lens for MsegDataInternal {
-    type Source = Self;
+// impl Lens for MsegDataInternal {
+//     type Source = Self;
 
-    type Target = RangeInclusive<f32>;
+//     type Target = RangeInclusive<f32>;
 
-    fn view<O, F: FnOnce(Option<&Self::Target>) -> O>(&self, source: &Self::Source, map: F) -> O {
-        map(Some(&source.range))
-    }
-}
+//     fn view<O, F: FnOnce(Option<&Self::Target>) -> O>(&self, source: &Self::Source, map: F) -> O {
+//         map(Some(&source.range))
+//     }
+// }
 
-impl Default for MsegDataInternal {
-    fn default() -> Self {
-        Self { range: 0f32..=1f32 }
-    }
-}
+// impl Default for MsegDataInternal {
+//     fn default() -> Self {
+//         Self { range: 0f32..=1f32 }
+//     }
+// }
 
-impl Model for MsegDataInternal {
-    fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
-        if let Some(ev) = event.message.downcast::<MsegEventInternal>() {
-            match ev {
-                MsegEventInternal::NoOp => todo!(),
-            }
-        }
-    }
-}
+// impl Model for MsegDataInternal {
+//     fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
+//         if let Some(ev) = event.message.downcast::<MsegEventInternal>() {
+//             // set the range
+//             self.range = match ev {
+//                 MsegEventInternal::SetStart(v) => *v..=*self.range.end(),
+//                 MsegEventInternal::SetEnd(v) => *self.range.start()..=*v,
+//             }
+//         }
+//     }
+// }
 
 pub enum MsegEventInternal {
-    NoOp,
+    SetStart(f32),
+    SetEnd(f32),
 }
 
 impl<L: Lens<Target = CurvePoints>> Mseg<L> {
@@ -62,13 +65,14 @@ impl<L: Lens<Target = CurvePoints>> Mseg<L> {
             points: lens.clone(),
         }
         .build2(cx, move |cx| {
-            if cx.data::<MsegDataInternal>().is_none() {
-                // Create some internal slider data (not exposed to the user)
-                MsegDataInternal { range: 0f32..=1f32 }.build(cx);
-            }
+            // if cx.data::<MsegDataInternal>().is_none() {
+            //     // Create some internal slider data (not exposed to the user)
+            //     MsegDataInternal { range: 0f32..=1f32 }.build(cx);
+            // }
             VStack::new(cx, |cx| {
                 MsegGraph::new(cx, lens);
-                Zoomer::new(cx, cx.data::<MsegDataInternal>().unwrap().clone());
+                // Zoomer::new(cx, cx.data::<MsegDataInternal>().unwrap().clone());
+                Zoomer::new(cx);
             });
         })
     }

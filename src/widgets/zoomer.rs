@@ -14,7 +14,7 @@ where
 {
     _phantom_data: PhantomData<L>,
     thumb_size: f32,
-    on_change: Option<Box<dyn Fn(&mut Context, f32)>>,
+    on_changing: Option<Box<dyn Fn(&mut Context, f32)>>,
     is_dragging: bool,
 }
 
@@ -36,9 +36,9 @@ impl Default for ZoomerDataInternal {
 impl Model for ZoomerDataInternal {
     fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
         if let Some(ev) = event.message.downcast::<ZoomerEventInternal>() {
-            match ev {
-                ZoomerEventInternal::SetRight(v) => todo!(),
-                ZoomerEventInternal::SetLeft(v) => todo!(),
+            self.range = match ev {
+                ZoomerEventInternal::SetStart(v) => *v..=*self.range.end(),
+                ZoomerEventInternal::SetEnd(v) => *self.range.start()..=*v,
             }
         }
     }
@@ -47,9 +47,9 @@ impl Model for ZoomerDataInternal {
 #[derive(Debug)]
 pub enum ZoomerEventInternal {
     /// Set the normalized position of the right view
-    SetRight(f32),
+    SetStart(f32),
     /// Set the normalized position of the left view
-    SetLeft(f32),
+    SetEnd(f32),
 }
 
 impl<L> Zoomer<L>
@@ -60,7 +60,7 @@ where
         Self {
             _phantom_data: PhantomData::default(),
             thumb_size: 8f32,
-            on_change: Default::default(),
+            on_changing: Default::default(),
             is_dragging: false,
         }
         .build2(cx, move |cx| {
@@ -115,11 +115,6 @@ where
                 }
                 _ => (),
             }
-        } else if let Some(ev) = event.message.downcast() {
-            match ev {
-                ZoomerEventInternal::SetLeft(v) => todo!(),
-                ZoomerEventInternal::SetRight(v) => todo!(),
-            }
         }
     }
 
@@ -144,17 +139,25 @@ where
 
 pub trait ZoomerHandle<'a> {
     type View: View;
-    fn overlay<B>(self, cx: &mut Context, builder: B) -> Handle<'a, Self::View>
+    fn on_changing<F, L>(self, callback: F) -> Self
     where
-        B: 'static + FnOnce(&mut Context);
+        F: 'static + Fn(&mut Context, f32),
+        L: Lens<Target = RangeInclusive<f32>>;
 }
 impl<'a, V: View> ZoomerHandle<'a> for Handle<'a, V> {
     type View = V;
-    fn overlay<B>(self, cx: &mut Context, builder: B) -> Handle<'a, Self::View>
+
+    fn on_changing<F, L>(self, callback: F) -> Self
     where
-        B: 'static + FnOnce(&mut Context),
+        F: 'static + Fn(&mut Context, f32),
+        L: Lens<Target = RangeInclusive<f32>>,
     {
-        (builder)(cx);
+        if let Some(view) = self.cx.views.get_mut(&self.entity) {
+            if let Some(zoomer) = view.downcast_mut::<Zoomer<L>>() {
+                zoomer.on_changing = Some(Box::new(callback));
+            }
+        }
+
         self
     }
 }

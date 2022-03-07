@@ -98,6 +98,5 @@ pub fn ui(cx: &mut Context, params: Pin<Arc<SynthyParams>>, context: Arc<dyn Gui
             cx,
             AppData::params.map(|params| params.env.read().unwrap().clone()),
         );
-        Zoomer::new(cx, AppData::zoom_view);
     });
 }
