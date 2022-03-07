@@ -1,6 +1,8 @@
 #![feature(trait_alias)]
 pub mod editor;
 pub mod ui;
+pub mod util;
+pub mod widgets;
 
 use editor::create_vizia_editor;
 use fundsp::hacker::*;
@@ -11,6 +13,7 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+use util::{CurvePoint, CurvePoints};
 
 type Note = u8;
 type Velocity = u8;
@@ -34,6 +37,18 @@ struct NoteInfo {
 
 pub struct SynthyEditor {}
 
+#[derive(Copy, Clone)]
+pub enum SynthyFloatParam {
+    AMod,
+    ARatio,
+    BMod,
+    BRatio,
+    ABMod,
+    NoiseAmp,
+    FilterFreq,
+    FilterQ,
+}
+
 #[derive(Params)]
 pub struct SynthyParams {
     #[id = "a_mod"]
@@ -41,13 +56,13 @@ pub struct SynthyParams {
     #[id = "a_ratio"]
     pub a_ratio: FloatParam,
     #[persist = "a_env"]
-    pub a_env: RwLock<Vec<(f32, f32)>>,
+    pub a_env: RwLock<CurvePoints>,
     #[persist = "b_env"]
-    pub b_env: RwLock<Vec<(f32, f32)>>,
+    pub b_env: RwLock<CurvePoints>,
     #[persist = "noise_env"]
-    pub noise_env: RwLock<Vec<(f32, f32)>>,
+    pub noise_env: RwLock<CurvePoints>,
     #[persist = "env"]
-    pub env: RwLock<Vec<(f32, f32)>>,
+    pub env: RwLock<CurvePoints>,
     #[id = "b_mod"]
     pub b_mod: FloatParam,
     #[id = "b_ratio"]
@@ -109,34 +124,58 @@ impl Default for SynthyParams {
             .with_value_to_string(formatters::f32_rounded(2)),
             filter_q: FloatParam::new("resonance", 0.2, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::f32_rounded(2)),
-            a_env: RwLock::new(vec![
-                (0f32, 0f32),
-                (0.5f32, 1.0f32),
-                (1.0f32, 0.7f32),
-                (2.0f32, 0.5f32),
-                (3.0f32, 0.0f32),
-            ]),
-            b_env: RwLock::new(vec![
-                (0f32, 0f32),
-                (0.5f32, 1.0f32),
-                (1.0f32, 0.7f32),
-                (2.0f32, 0.5f32),
-                (3.0f32, 0.0f32),
-            ]),
-            noise_env: RwLock::new(vec![
-                (0f32, 0f32),
-                (0.5f32, 1.0f32),
-                (1.0f32, 0.7f32),
-                (2.0f32, 0.5f32),
-                (3.0f32, 0.0f32),
-            ]),
-            env: RwLock::new(vec![
-                (0f32, 0f32),
-                (0.5f32, 1.0f32),
-                (1.0f32, 0.7f32),
-                (2.0f32, 0.5f32),
-                (3.0f32, 0.0f32),
-            ]),
+            a_env: RwLock::new(CurvePoints::new(
+                vec![
+                    (0f32, 0f32),
+                    (0.5f32, 1.0f32),
+                    (1.0f32, 0.7f32),
+                    (2.0f32, 0.5f32),
+                    (3.0f32, 0.0f32),
+                ]
+                .iter()
+                .cloned()
+                .map(CurvePoint::from)
+                .collect(),
+            )),
+            b_env: RwLock::new(CurvePoints::new(
+                vec![
+                    (0f32, 0f32),
+                    (0.5f32, 1.0f32),
+                    (1.0f32, 0.7f32),
+                    (2.0f32, 0.5f32),
+                    (3.0f32, 0.0f32),
+                ]
+                .iter()
+                .cloned()
+                .map(CurvePoint::from)
+                .collect(),
+            )),
+            noise_env: RwLock::new(CurvePoints::new(
+                vec![
+                    (0f32, 0f32),
+                    (0.5f32, 1.0f32),
+                    (1.0f32, 0.7f32),
+                    (2.0f32, 0.5f32),
+                    (3.0f32, 0.0f32),
+                ]
+                .iter()
+                .cloned()
+                .map(CurvePoint::from)
+                .collect(),
+            )),
+            env: RwLock::new(CurvePoints::new(
+                vec![
+                    (0f32, 0f32),
+                    (0.5f32, 1.0f32),
+                    (1.0f32, 0.7f32),
+                    (2.0f32, 0.5f32),
+                    (3.0f32, 0.0f32),
+                ]
+                .iter()
+                .cloned()
+                .map(CurvePoint::from)
+                .collect(),
+            )),
         }
     }
 }
@@ -268,7 +307,7 @@ impl Plugin for Synthy {
                     let relative_time = self.time - note.on;
                     // increase the point counter if more than the next point
                     if let Some(next_point) = envelope.get(note.stage + 1) {
-                        if relative_time.as_secs_f32() >= next_point.0 {
+                        if relative_time.as_secs_f32() >= next_point.x {
                             note.stage += 1;
                         }
                     }
@@ -280,7 +319,7 @@ impl Plugin for Synthy {
             }
 
             // lerp between the two points based on note stage
-            let mut set_env = |param: &RwLock<Vec<(f32, f32)>>, tag| {
+            let mut set_env = |param: &RwLock<CurvePoints>, tag| {
                 if let Some(note) = &self.note {
                     let relative_time = self.time - note.on;
                     if let Ok(envelope) = param.read() {
@@ -288,8 +327,8 @@ impl Plugin for Synthy {
                             (envelope.get(note.stage), envelope.get(note.stage + 1))
                         {
                             let normalized =
-                                (relative_time.as_secs_f32() - left.0) / (right.0 - left.0);
-                            let val = lerp(left.1, right.1, normalized);
+                                (relative_time.as_secs_f32() - left.x) / (right.x - left.x);
+                            let val = lerp(left.y, right.y, normalized);
                             self.audio.set(tag as i64, val as f64);
                         }
                     }

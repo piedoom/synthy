@@ -23,3 +23,5 @@ baseview = { git = "https://github.com/RustAudio/baseview.git", rev = "f6e99e9aa
 raw-window-handle = "0.4"
 atomic_float = "0.1"
 vizia = { git = "https://github.com/vizia/vizia", features = ["baseview"], default-features = false }
+serde = "1"
+femtovg = "*"

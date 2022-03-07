@@ -5,6 +5,8 @@ use vizia::{Application, WindowDescription};
 
 pub use vizia::*;
 
+const SIZE: (u32, u32) = (900, 600);
+
 pub fn create_vizia_editor<U>(update: U) -> Option<Box<dyn Editor>>
 where
     U: Fn(&mut Context, Arc<dyn GuiContext>) + 'static + Send + Sync,
@@ -26,7 +28,7 @@ impl Editor for ViziaEditor {
     ) -> Box<dyn std::any::Any + Send + Sync> {
         let update = self.update.clone();
 
-        let window_description = WindowDescription::new().with_inner_size(300, 300);
+        let window_description = WindowDescription::new().with_inner_size(SIZE.0, SIZE.1);
         let window = Application::new(window_description, move |cx| {
             (update)(cx, context.clone());
         })
@@ -36,7 +38,7 @@ impl Editor for ViziaEditor {
     }
 
     fn size(&self) -> (u32, u32) {
-        (300, 300)
+        (SIZE.0, SIZE.1)
     }
 }
 
