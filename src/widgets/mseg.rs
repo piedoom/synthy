@@ -73,7 +73,8 @@ impl<L: Lens<Target = CurvePoints>> Mseg<L> {
                 MsegGraph::new(cx, lens);
                 // Zoomer::new(cx, cx.data::<MsegDataInternal>().unwrap().clone());
                 Zoomer::new(cx);
-            });
+            })
+            .width(Percentage(100f32));
         })
     }
 }

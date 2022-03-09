@@ -8,32 +8,14 @@ use vizia::{
     View, WindowEvent,
 };
 
-pub struct Zoomer<L>
-where
-    L: Lens<Target = RangeInclusive<f32>>,
-{
-    _phantom_data: PhantomData<L>,
+pub struct Zoomer {
     thumb_size: f32,
+    range: RangeInclusive<f32>,
     on_changing: Option<Box<dyn Fn(&mut Context, f32)>>,
     is_dragging: bool,
 }
 
-#[derive(Clone, Debug, Lens, Data)]
-pub struct ZoomerDataInternal {
-    pub thumb_size: f32,
-    pub range: RangeInclusive<f32>,
-}
-
-impl Default for ZoomerDataInternal {
-    fn default() -> Self {
-        Self {
-            thumb_size: 16f32,
-            range: 0f32..=1f32,
-        }
-    }
-}
-
-impl Model for ZoomerDataInternal {
+impl Model for Zoomer {
     fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
         if let Some(ev) = event.message.downcast::<ZoomerEventInternal>() {
             self.range = match ev {
@@ -52,54 +34,29 @@ pub enum ZoomerEventInternal {
     SetEnd(f32),
 }
 
-impl<L> Zoomer<L>
-where
-    L: Lens<Target = RangeInclusive<f32>>,
-{
-    pub fn new(cx: &mut Context, lens: L) -> Handle<Self> {
+impl Zoomer {
+    pub fn new(cx: &mut Context) -> Handle<Self> {
         Self {
-            _phantom_data: PhantomData::default(),
             thumb_size: 8f32,
             on_changing: Default::default(),
             is_dragging: false,
+            range: 0f32..=1f32,
         }
         .build2(cx, move |cx| {
-            if cx.data::<ZoomerDataInternal>().is_none() {
-                // Create some internal slider data (not exposed to the user)
-                ZoomerDataInternal {
-                    thumb_size: 0.0,
-                    range: 0f32..=1f32,
-                    ..Default::default()
-                }
-                .build(cx);
-            }
-
-            Binding::new(cx, ZoomerDataInternal::root, move |cx, internal| {
-                // build
-                Element::new(cx)
-                    .height(Stretch(1.0))
-                    .left(Pixels(0.0))
-                    .right(Stretch(1.0))
-                    .background_color(Color::white())
-                    .class("active")
-                    .bind(lens.clone(), move |handle, value| {
-                        let val = value.get(handle.cx);
-                        let width = val.end() - val.start();
-                        handle
-                            .width(Percentage(width * 100.0))
-                            .left(Percentage(val.start() * 100.0));
-                    });
-            });
+            // build
+            Element::new(cx)
+                .height(Stretch(1.0))
+                .left(Pixels(0.0))
+                .right(Stretch(1.0))
+                .background_color(Color::white())
+                .class("active");
         })
         .width(Stretch(1.0))
         .height(Pixels(24f32))
     }
 }
 
-impl<L> View for Zoomer<L>
-where
-    L: Lens<Target = RangeInclusive<f32>>,
-{
+impl View for Zoomer {
     fn element(&self) -> Option<String> {
         Some("zoomer".to_string())
     }
@@ -109,6 +66,7 @@ where
             match ev {
                 WindowEvent::MouseDown(button) if *button == MouseButton::Left => {
                     self.is_dragging = true;
+                    self.range = 0.1..=0.6;
                 }
                 WindowEvent::MouseUp(button) if *button == MouseButton::Left => {
                     self.is_dragging = false;
@@ -153,7 +111,7 @@ impl<'a, V: View> ZoomerHandle<'a> for Handle<'a, V> {
         L: Lens<Target = RangeInclusive<f32>>,
     {
         if let Some(view) = self.cx.views.get_mut(&self.entity) {
-            if let Some(zoomer) = view.downcast_mut::<Zoomer<L>>() {
+            if let Some(zoomer) = view.downcast_mut::<Zoomer>() {
                 zoomer.on_changing = Some(Box::new(callback));
             }
         }
