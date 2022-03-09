@@ -1,4 +1,11 @@
-use crate::{widgets::zoomer::Zoomer, SynthyFloatParam, SynthyParams};
+use crate::{
+    util::CurvePoints,
+    widgets::{
+        mseg::{Mseg, MsegHandle},
+        zoomer::Zoomer,
+    },
+    SynthyFloatParam, SynthyParams,
+};
 use fundsp::math::xerp;
 use nih_plug::prelude::*;
 use std::{ops::RangeInclusive, pin::Pin, sync::Arc};
@@ -94,9 +101,25 @@ pub fn ui(cx: &mut Context, params: Pin<Arc<SynthyParams>>, context: Arc<dyn Gui
         //     SynthyFloatParam::BMod,
         //     AppData::params.map(|params| params.b_mod.normalized_value()),
         // );
-        crate::widgets::mseg::Mseg::new(
+        Mseg::new(
             cx,
             AppData::params.map(|params| params.env.read().unwrap().clone()),
         );
-    });
+        // .on_changing_point::<_, _>(|cx, index, pos| {
+        //     AppData::params.map(|x| {
+        //         {
+        //             //
+        //             if let Ok(points) = x.env.try_write() {
+        //                 if let Some(point) = points.get_mut(index) {
+        //                     point.x = pos.x;
+        //                     point.y = pos.y;
+        //                 }
+        //             }
+        //         }
+        //     });
+        // });
+
+        //crate::widgets::zoomer::Zoomer::new(cx, AppData::zoom_view);
+    })
+    .width(Pixels(500f32));
 }

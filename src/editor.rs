@@ -40,6 +40,10 @@ impl Editor for ViziaEditor {
     fn size(&self) -> (u32, u32) {
         (SIZE.0, SIZE.1)
     }
+
+    fn set_scale_factor(&self, factor: f32) -> bool {
+        true
+    }
 }
 
 struct ViziaEditorHandle {

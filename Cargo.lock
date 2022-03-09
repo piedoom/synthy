@@ -42,12 +42,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "000444226fcff248f2bc4c7625be32c63caccfecc2723a2b9f78a7487a49c407"
 
 [[package]]
-name = "arrayvec"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
-
-[[package]]
 name = "assert_no_alloc"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -479,15 +473,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "euclid"
-version = "0.22.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da96828553a086d7b18dcebfc579bd9628b016f86590d7453c115e490fa74b80"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "femtovg"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -632,6 +617,12 @@ dependencies = [
  "log",
  "xml-rs",
 ]
+
+[[package]]
+name = "glam"
+version = "0.20.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4fa84eead97d5412b2a20aed4d66612a97a9e41e08eababdb9ae2bf88667490"
 
 [[package]]
 name = "glow"
@@ -874,17 +865,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcb87f3080f6d1d69e8c564c0fcfde1d7aa8cc451ce40cae89479111f03bc0eb"
 
 [[package]]
-name = "lyon_geom"
-version = "0.17.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce99ce77c22bfd8f39a95b9c749dffbfc3e2491ea30c874764c801a8b1485489"
-dependencies = [
- "arrayvec",
- "euclid",
- "num-traits",
-]
-
-[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -988,7 +968,7 @@ checksum = "e1bcdd74c20ad5d95aacd60ef9ba40fdf77f767051040541df557b7a9b2a2121"
 [[package]]
 name = "nih_plug"
 version = "0.0.0"
-source = "git+https://github.com/robbert-vdh/nih-plug#e491ff6319f94f5bb8dd68a57ed0123588ec925f"
+source = "git+https://github.com/robbert-vdh/nih-plug#fedfa47b43bbaca0c9a08f8859799ddc0d6ca34b"
 dependencies = [
  "assert_no_alloc",
  "atomic_float",
@@ -1010,7 +990,7 @@ dependencies = [
 [[package]]
 name = "nih_plug_derive"
 version = "0.1.0"
-source = "git+https://github.com/robbert-vdh/nih-plug#e491ff6319f94f5bb8dd68a57ed0123588ec925f"
+source = "git+https://github.com/robbert-vdh/nih-plug#fedfa47b43bbaca0c9a08f8859799ddc0d6ca34b"
 dependencies = [
  "quote",
  "syn",
@@ -1607,9 +1587,9 @@ dependencies = [
 
 [[package]]
 name = "siphasher"
-version = "0.3.9"
+version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a86232ab60fa71287d7f2ddae4a7073f6b7aac33631c3015abb556f08c6d0a3e"
+checksum = "7bd3e3206899af3f8b12af284fafc038cc1dc2b41d1b89dd17297221c5d225de"
 
 [[package]]
 name = "slotmap"
@@ -1664,9 +1644,9 @@ dependencies = [
  "dirs",
  "femtovg",
  "fundsp",
+ "glam",
  "log",
  "log-panics",
- "lyon_geom",
  "nih_plug",
  "num-derive",
  "num-traits",
@@ -1855,7 +1835,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 [[package]]
 name = "vizia"
 version = "0.1.0"
-source = "git+https://github.com/vizia/vizia#a2335bb967096de2e19c858ef81cf349f2346b17"
+source = "git+https://github.com/vizia/vizia#3b9e9cca09931bc8d0841f0613143bf7557c52e5"
 dependencies = [
  "vizia_baseview",
  "vizia_core",
@@ -1864,7 +1844,7 @@ dependencies = [
 [[package]]
 name = "vizia_baseview"
 version = "0.1.0"
-source = "git+https://github.com/vizia/vizia#a2335bb967096de2e19c858ef81cf349f2346b17"
+source = "git+https://github.com/vizia/vizia#3b9e9cca09931bc8d0841f0613143bf7557c52e5"
 dependencies = [
  "baseview",
  "femtovg",
@@ -1877,7 +1857,7 @@ dependencies = [
 [[package]]
 name = "vizia_core"
 version = "0.1.0"
-source = "git+https://github.com/vizia/vizia#a2335bb967096de2e19c858ef81cf349f2346b17"
+source = "git+https://github.com/vizia/vizia#3b9e9cca09931bc8d0841f0613143bf7557c52e5"
 dependencies = [
  "bitflags",
  "cssparser",
@@ -1887,6 +1867,7 @@ dependencies = [
  "fluent-syntax",
  "fnv",
  "image",
+ "instant",
  "keyboard-types",
  "locale_config",
  "morphorm",
@@ -1898,7 +1879,7 @@ dependencies = [
 [[package]]
 name = "vizia_derive"
 version = "0.1.0"
-source = "git+https://github.com/vizia/vizia#a2335bb967096de2e19c858ef81cf349f2346b17"
+source = "git+https://github.com/vizia/vizia#3b9e9cca09931bc8d0841f0613143bf7557c52e5"
 dependencies = [
  "proc-macro2",
  "quote",
