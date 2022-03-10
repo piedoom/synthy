@@ -11,6 +11,12 @@ use vizia::*;
 /// The distance in pixels before a node is considered hovered
 const HOVER_RADIUS: f32 = 16f32;
 
+enum MsegInternalEvent {
+    OnChangingRangeStart(f32),
+    OnChangingRangeEnd(f32),
+}
+
+
 pub struct Mseg<P, R>
 where
     P: Lens<Target = CurvePoints>,
@@ -19,6 +25,8 @@ where
     points: P,
     range: R,
     on_changing_point: Option<Box<dyn Fn(&mut Context, usize, Vec2)>>,
+    on_changing_range_start: Option<Box<dyn Fn(&mut Context, f32)>>,
+    on_changing_range_end: Option<Box<dyn Fn(&mut Context, f32)>>,
 }
 
 impl<P, R> Mseg<P, R>
@@ -26,13 +34,19 @@ where
     P: Lens<Target = CurvePoints>,
     R: Lens<Target = RangeInclusive<f32>>,
 {
-    pub fn new(cx: &mut Context, points: P, range: R) -> Handle<Mseg<P, R>> {
+    pub fn new(
+        cx: &mut Context,
+        points: P,
+        range: R,
+    ) -> Handle<Mseg<P, R>> {
         Self {
-            points,
-            range,
+            points: points.clone(),
+            range: range.clone(),
             on_changing_point: None,
+            on_changing_range_start: None,
+            on_changing_range_end: None,
         }
-        .build2(cx, move |cx| {
+        .build2(cx, |cx| {
             let background_color: Color = cx
                 .style
                 .background_color
@@ -40,8 +54,15 @@ where
                 .cloned()
                 .unwrap_or_default();
 
-            MsegGraph::new(cx, points, range).background_color(background_color);
-            Zoomer::new(cx, range);
+            MsegGraph::new(cx, points, range.clone()).background_color(background_color);
+            Zoomer::new(
+                cx,
+                range.clone(),
+            )
+            .on_changing_start(|cx, x| 
+                cx.emit(MsegInternalEvent::OnChangingRangeStart(x)))
+            .on_changing_end(|cx, x|
+                cx.emit(MsegInternalEvent::OnChangingRangeEnd(x)));
         })
     }
 }
@@ -53,6 +74,85 @@ where
 {
     fn element(&self) -> Option<String> {
         Some("mseg".to_string())
+    }
+
+    fn event(&mut self, cx: &mut Context, event: &mut Event) {
+        if let Some(ev) = event.message.downcast::<MsegInternalEvent>() {
+            match ev {
+                MsegInternalEvent::OnChangingRangeStart(x) => {
+                    if let Some(callback) = self.on_changing_range_start.take() {
+                        (callback)(cx, *x);
+                        self.on_changing_range_start = Some(callback);
+                    }
+                },
+                MsegInternalEvent::OnChangingRangeEnd(x) => {
+                    if let Some(callback) = self.on_changing_range_start.take() {
+                        (callback)(cx, *x);
+                        self.on_changing_range_end = Some(callback);
+                    }
+                },
+            }
+        }
+    }
+}
+
+pub trait MsegHandle<P, R> where P: Lens<Target = CurvePoints>,
+R: Lens<Target = RangeInclusive<f32>> {
+    type View: View;
+    fn on_changing_range_start<F>(self, callback: F) -> Self
+    where
+        F: 'static + Fn(&mut Context, f32);
+    fn on_changing_range_end<F>(self, callback: F) -> Self
+    where
+        F: 'static + Fn(&mut Context, f32);
+    fn on_changing_point<F>(self, callback: F) -> Self
+    where
+        F: 'static + Fn(&mut Context, usize, Vec2);
+}
+
+impl<'a, V: View, P, R> MsegHandle<P, R> for Handle<'a, V>
+where
+P: Lens<Target = CurvePoints>,
+R: Lens<Target = RangeInclusive<f32>>,
+{
+    type View = V;
+    fn on_changing_point<F: 'static + Fn(&mut Context, usize, Vec2)>(self, callback: F) -> Self {
+        if let Some(zoomer) = self
+            .cx
+            .views
+            .get_mut(&self.entity)
+            .and_then(|f| f.downcast_mut::<Mseg<P, R>>())
+        {
+            zoomer.on_changing_point = Some(Box::new(callback));
+        }
+
+        self
+    }
+
+    fn on_changing_range_start<F: 'static + Fn(&mut Context, f32)>(self, callback: F) -> Self {
+        if let Some(zoomer) = self
+            .cx
+            .views
+            .get_mut(&self.entity)
+            .and_then(|f| f.downcast_mut::<Mseg<P, R>>())
+        {
+            zoomer.on_changing_range_start = Some(Box::new(callback));
+        }
+
+        self
+    }
+
+    fn on_changing_range_end<F: 'static + Fn(&mut Context, f32)>(self, callback: F) -> Self {
+        if let Some(zoomer) = self
+            .cx
+            .views
+            .get_mut(&self.entity)
+            .and_then(|f| f.downcast_mut::<Mseg<P, R>>())
+        {
+            zoomer.on_changing_range_end = Some(Box::new(callback));
+        }
+
+        self
     }
 }
 
@@ -71,6 +171,7 @@ where
     active_point_id: Option<usize>,
     is_dragging_point: bool,
     on_changing_point: Option<Box<dyn Fn(&mut Context, usize, Vec2)>>,
+    
 }
 
 impl<P, R> MsegGraph<P, R>
@@ -86,6 +187,7 @@ where
             is_dragging_point: false,
             on_changing_point: None,
             range,
+            
         }
         .build2(cx, |cx| {})
     }
@@ -100,7 +202,7 @@ where
         let points = self.points.get(cx).clone();
         let ui_points = points
             .iter()
-            .map(|point| data_to_ui_pos(cx, point, self.range, self.max, cx.current));
+            .map(|point| data_to_ui_pos(cx, point, self.range.clone(), self.max, cx.current));
         // Window events to move points
         if let Some(ev) = event.message.downcast::<WindowEvent>() {
             match ev {
@@ -118,8 +220,13 @@ where
                         // Up to the user to drag the current point around
                         if let Some(callback) = self.on_changing_point.take() {
                             let active_id = self.active_point_id.unwrap();
-                            let new_v =
-                                ui_to_data_pos(cx, &current_pos, self.range, self.max, cx.current);
+                            let new_v = ui_to_data_pos(
+                                cx,
+                                &current_pos,
+                                self.range.clone(),
+                                self.max,
+                                cx.current,
+                            );
                             (callback)(cx, active_id, new_v);
                             self.on_changing_point = Some(callback);
                         } // asdasdasdasd
@@ -175,7 +282,7 @@ where
             .map(|point| {
                 (
                     point.0,
-                    data_to_ui_pos(cx, point.1, self.range, self.max, cx.current),
+                    data_to_ui_pos(cx, point.1, self.range.clone(), self.max, cx.current),
                 )
             })
             .collect();
@@ -239,7 +346,7 @@ pub fn ui_to_data_pos(
     // Scale points to fit within `(x,y) = ([0..=max], [0..=1])`
     // This assumes mouse coordinates are relative and not absolute. Which is possibly not true!
     let y = (height - ui_point.y) / height;
-    let range = *range_data.get(cx);
+    let range = range_data.get(cx);
     let offset_data = range.start() * max_data;
     let x = ((ui_point.x / width) * (range.end() - range.start())) + offset_data;
     Vec2::new(x, y)
@@ -264,7 +371,7 @@ pub fn data_to_ui_pos(
     // offset by getting the view's starting x value, which is normalized.
     // We then see how much time that offsets by multiplying that normalized
     // value times the maximum X of our MSEG.
-    let range = *range_data.get(cx);
+    let range = range_data.get(cx);
     let offset = range.start() * max;
     // Calculate the x-zoom scale to apply to points
     let scale = 1f32 / ((range.end() - range.start()) * max);

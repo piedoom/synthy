@@ -1,9 +1,6 @@
 use crate::{
     util::CurvePoints,
-    widgets::{
-        mseg::{Mseg, MsegHandle},
-        zoomer::{Zoomer, ZoomerHandle},
-    },
+    widgets::{mseg::{Mseg, MsegHandle}, zoomer::Zoomer},
     SynthyFloatParam, SynthyParams,
 };
 use fundsp::math::xerp;
@@ -24,6 +21,7 @@ pub struct AppData {
     env_zoom_view: RangeInclusive<f32>,
 }
 
+#[derive(Clone, Copy)]
 pub enum SynthyEvent {
     SetFloatParam { param: SynthyFloatParam, value: f32 },
     SetEnvStart { value: f32 },
@@ -34,52 +32,55 @@ pub enum SynthyEvent {
 impl Model for AppData {
     fn event(&mut self, _cx: &mut Context, event: &mut Event) {
         let set = ParamSetter::new(self.context.as_ref());
-        if let Some(app_event) = event.message.downcast() {
+        if let Some(app_event) = event.message.downcast().cloned() {
             match app_event {
                 SynthyEvent::SetFloatParam { param, value } => match param {
                     SynthyFloatParam::AMod => {
-                        set.set_parameter_normalized(&self.params.a_mod, *value)
+                        set.set_parameter_normalized(&self.params.a_mod, value)
                     }
                     SynthyFloatParam::ARatio => {
-                        set.set_parameter_normalized(&self.params.a_ratio, *value)
+                        set.set_parameter_normalized(&self.params.a_ratio, value)
                     }
                     SynthyFloatParam::BMod => {
-                        set.set_parameter_normalized(&self.params.b_mod, *value)
+                        set.set_parameter_normalized(&self.params.b_mod, value)
                     }
                     SynthyFloatParam::BRatio => {
-                        set.set_parameter_normalized(&self.params.b_ratio, *value)
+                        set.set_parameter_normalized(&self.params.b_ratio, value)
                     }
                     SynthyFloatParam::ABMod => {
-                        set.set_parameter_normalized(&self.params.a_mod_b, *value)
+                        set.set_parameter_normalized(&self.params.a_mod_b, value)
                     }
                     SynthyFloatParam::NoiseAmp => {
-                        set.set_parameter_normalized(&self.params.noise_amp, *value)
+                        set.set_parameter_normalized(&self.params.noise_amp, value)
                     }
                     SynthyFloatParam::FilterFreq => {
-                        set.set_parameter_normalized(&self.params.filter_freq, *value)
+                        set.set_parameter_normalized(&self.params.filter_freq, value)
                     }
                     SynthyFloatParam::FilterQ => {
-                        set.set_parameter_normalized(&self.params.filter_q, *value)
+                        set.set_parameter_normalized(&self.params.filter_q, value)
                     }
                 },
-                SynthyEvent::SetEnvPoint { index, point } => {
-                    AppData::params.map(|x| {
+                SynthyEvent::SetEnvPoint {
+                    index,
+                    point: new_point,
+                } => {
+                    AppData::params.map(move |x| {
                         {
                             //
-                            if let Ok(points) = x.env.try_write() {
-                                if let Some(point) = points.get_mut(*index) {
-                                    point.x = point.x;
-                                    point.y = point.y;
+                            if let Ok(mut points) = x.env.try_write() {
+                                if let Some(point) = points.get_mut(index) {
+                                    point.x = new_point.x;
+                                    point.y = new_point.y;
                                 }
                             }
                         }
                     });
                 }
                 SynthyEvent::SetEnvStart { value } => {
-                    self.env_zoom_view = *value..=*self.env_zoom_view.end();
+                    self.env_zoom_view = value..=*self.env_zoom_view.end();
                 }
                 SynthyEvent::SetEnvEnd { value } => {
-                    self.env_zoom_view = *self.env_zoom_view.end()..=*value;
+                    self.env_zoom_view = *self.env_zoom_view.start()..=value;
                 }
             }
         }
@@ -129,11 +130,15 @@ pub fn ui(cx: &mut Context, params: Pin<Arc<SynthyParams>>, context: Arc<dyn Gui
             AppData::params.map(|params| params.env.read().unwrap().clone()),
             AppData::env_zoom_view,
         )
-        .on_changing_range_start(|cx, x| cx.emit(SynthyEvent::SetEnvStart { value: x }))
-        .on_changing_range_end(|cx, x| cx.emit(SynthyEvent::SetEnvEnd { value: x }));
-        // .on_changing_point(|cx, index, point| {
-        //     cx.emit(SynthyEvent::SetEnvPoint { index, point });
-        // });
+        .on_changing_range_start(|cx, x| {
+            cx.emit(SynthyEvent::SetEnvStart { value: x })
+        })
+        .on_changing_range_end(|cx, x|{
+            cx.emit(SynthyEvent::SetEnvEnd { value: x })
+        })
+        .on_changing_point(|cx, index, point| {
+            cx.emit(SynthyEvent::SetEnvPoint { index, point });
+        });
 
         //crate::widgets::zoomer::Zoomer::new(cx, AppData::zoom_view);
     })
