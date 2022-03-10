@@ -121,5 +121,7 @@ pub fn ui(cx: &mut Context, params: Pin<Arc<SynthyParams>>, context: Arc<dyn Gui
 
         //crate::widgets::zoomer::Zoomer::new(cx, AppData::zoom_view);
     })
+    .left(Pixels(100f32))
+    .top(Pixels(100f32))
     .width(Pixels(500f32));
 }

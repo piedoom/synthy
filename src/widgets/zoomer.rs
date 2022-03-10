@@ -34,9 +34,16 @@ impl Default for ZoomerDataInternal {
 impl Model for ZoomerDataInternal {
     fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
         if let Some(ev) = event.message.downcast::<ZoomerEventInternal>() {
+            // set min / max so that it is never out of range or invalid
             self.range = match ev {
-                ZoomerEventInternal::SetViewRangeStart(v) => *v..=*self.range.end(),
-                ZoomerEventInternal::SetViewRangeEnd(v) => *self.range.start()..=*v,
+                ZoomerEventInternal::SetViewRangeStart(x) => {
+                    let x = x.max(0f32).min(*self.range.end());
+                    x..=*self.range.end()
+                }
+                ZoomerEventInternal::SetViewRangeEnd(x) => {
+                    let x = x.max(*self.range.start()).min(1f32);
+                    *self.range.start()..=x
+                }
             };
         }
     }
@@ -61,7 +68,7 @@ impl<L> Zoomer<L>
 where
     L: Lens<Target = RangeInclusive<f32>>,
 {
-    pub fn new(cx: &mut Context, lens: L) -> Handle<Release<Self>> {
+    pub fn new(cx: &mut Context, lens: L) -> Handle<Self> {
         Self {
             on_changing_range_start: Default::default(),
             on_changing_range_end: Default::default(),
@@ -132,9 +139,6 @@ where
         })
         .width(Stretch(1.0))
         .height(Pixels(24f32))
-        .on_release(|cx| {
-            cx.emit(ZoomerEvent::FinishSet);
-        })
     }
 }
 
@@ -156,28 +160,38 @@ where
         }
         #[allow(clippy::collapsible_match)]
         if let Some(ev) = event.message.downcast::<WindowEvent>() {
-            if let WindowEvent::MouseMove(x, _y) = ev {
-                match self.status {
-                    ZoomerEvent::SetStart => {
-                        // Set the zoomer amount based on the mouse positioning
-                        let new_x = *x / cx.cache.get_width(cx.current);
-
-                        cx.emit(ZoomerEventInternal::SetViewRangeStart(new_x));
-                        if let Some(callback) = self.on_changing_range_start.take() {
-                            (callback)(cx, new_x);
-                            self.on_changing_range_start = Some(callback);
+            match ev {
+                WindowEvent::MouseMove(x, _y) => {
+                    let width = cx.cache.get_width(cx.current);
+                    // adjust X to be relative
+                    let x = *x - cx.cache.get_bounds(cx.current).x;
+                    // get new data x
+                    let x = x / width;
+                    match self.status {
+                        ZoomerEvent::SetStart => {
+                            // Set the zoomer amount based on the mouse positioning
+                            cx.emit(ZoomerEventInternal::SetViewRangeStart(x));
+                            if let Some(callback) = self.on_changing_range_start.take() {
+                                (callback)(cx, x);
+                                self.on_changing_range_start = Some(callback);
+                            }
                         }
-                    }
-                    ZoomerEvent::SetEnd => {
-                        let new_x = *x / cx.cache.get_width(cx.current);
-                        cx.emit(ZoomerEventInternal::SetViewRangeStart(new_x));
-                        if let Some(callback) = self.on_changing_range_end.take() {
-                            (callback)(cx, new_x);
-                            self.on_changing_range_end = Some(callback);
+                        ZoomerEvent::SetEnd => {
+                            cx.emit(ZoomerEventInternal::SetViewRangeStart(x));
+                            if let Some(callback) = self.on_changing_range_end.take() {
+                                (callback)(cx, x);
+                                self.on_changing_range_end = Some(callback);
+                            }
                         }
+                        ZoomerEvent::FinishSet => (),
                     }
-                    ZoomerEvent::FinishSet => (),
                 }
+                WindowEvent::MouseUp(button) => {
+                    if button == &MouseButton::Left {
+                        cx.emit(ZoomerEvent::FinishSet);
+                    }
+                }
+                _ => (),
             }
         }
     }

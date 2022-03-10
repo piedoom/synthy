@@ -47,11 +47,17 @@ impl Default for MsegRangeInternal {
 impl Model for MsegRangeInternal {
     fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
         if let Some(ev) = event.message.downcast::<MsegRangeEventInternal>() {
-            // set the range
+            // set min / max so that it is never out of range or invalid
             self.range = match ev {
-                MsegRangeEventInternal::SetViewRangeStart(v) => *v..=*self.range.end(),
-                MsegRangeEventInternal::SetViewRangeEnd(v) => *self.range.start()..=*v,
-            }
+                MsegRangeEventInternal::SetViewRangeStart(x) => {
+                    let x = x.max(0f32).min(*self.range.end());
+                    x..=*self.range.end()
+                }
+                MsegRangeEventInternal::SetViewRangeEnd(x) => {
+                    let x = x.max(*self.range.start()).min(1f32);
+                    *self.range.start()..=x
+                }
+            };
         }
     }
 }
@@ -157,7 +163,7 @@ impl<'a, L: Lens<Target = CurvePoints>> View for MsegGraph<L> {
         let points = self.points.get(cx).clone();
         let ui_points = points
             .iter()
-            .map(|point| self.data_to_ui_pos(cx, point, cx.current));
+            .map(|point| data_to_ui_pos(cx, point, self.max, cx.current));
         // Window events to move points
         if let Some(ev) = event.message.downcast::<WindowEvent>() {
             match ev {
@@ -175,7 +181,7 @@ impl<'a, L: Lens<Target = CurvePoints>> View for MsegGraph<L> {
                         // Up to the user to drag the current point around
                         if let Some(callback) = self.on_changing_point.take() {
                             let active_id = self.active_point_id.unwrap();
-                            let new_v = self.ui_to_data_pos(cx, &current_pos, cx.current);
+                            let new_v = ui_to_data_pos(cx, &current_pos, self.max, cx.current);
                             (callback)(cx, active_id, new_v);
                             self.on_changing_point = Some(callback);
                         } // asdasdasdasd
@@ -227,7 +233,7 @@ impl<'a, L: Lens<Target = CurvePoints>> View for MsegGraph<L> {
         let points = &**self.points.get(cx);
         let ui_points = points
             .iter()
-            .map(|point| self.data_to_ui_pos(cx, point, cx.current));
+            .map(|point| data_to_ui_pos(cx, point, self.max, cx.current));
 
         // Draw background rect
         let mut path = Path::new();
@@ -263,32 +269,54 @@ impl<'a, L: Lens<Target = CurvePoints>> View for MsegGraph<L> {
     }
 }
 
-impl<'a, L: Lens<Target = CurvePoints>> MsegGraph<L> {
-    /// Convert a screen value to its data position
-    pub fn ui_to_data_pos(&self, cx: &Context, point: &Vec2, container: Entity) -> Vec2 {
-        todo!();
-    }
-    pub fn data_to_ui_pos(&self, cx: &Context, point: &CurvePoint, container: Entity) -> Vec2 {
-        let data = cx.data::<MsegRangeInternal>().unwrap();
-        let (width, height) = (
-            cx.cache.get_width(container),
-            cx.cache.get_height(container),
-        );
-        // y value is a simple scale
-        let y = height - (point.y * height);
-        // x value requires us to calculate our zoomed position TODO: Zoom too
+/// Convert a screen value to its data position
+pub fn ui_to_data_pos(cx: &Context, ui_point: &Vec2, max_data: f32, container: Entity) -> Vec2 {
+    let data = cx.data::<MsegRangeInternal>().unwrap();
+    let (width, height) = (
+        cx.cache.get_width(container),
+        cx.cache.get_height(container),
+    );
+    // Assume `ui_point` is an absolute coordinate. We must convert it to relative coordinates
+    let mut ui_point = *ui_point;
+    let bounds = {
+        let b = cx.cache.get_bounds(cx.current);
+        Vec2::new(b.x, b.y)
+    };
+    // Convert to relative point
+    ui_point -= bounds;
+    // Scale points to fit within `(x,y) = ([0..=max], [0..=1])`
+    // This assumes mouse coordinates are relative and not absolute. Which is possibly not true!
+    let y = (height - ui_point.y) / height;
+    let offset_data = data.range.start() * max_data;
+    let x = ((ui_point.x / width) * (data.range.end() - data.range.start())) + offset_data;
+    Vec2::new(x, y)
+}
+pub fn data_to_ui_pos(cx: &Context, point: &CurvePoint, max: f32, container: Entity) -> Vec2 {
+    let data = cx.data::<MsegRangeInternal>().unwrap();
+    let (width, height) = (
+        cx.cache.get_width(container),
+        cx.cache.get_height(container),
+    );
+    // y value is a simple scale
+    let y = height - (point.y * height);
+    // x value requires us to calculate our zoomed position TODO: Zoom too
 
-        // Calculate the x-offset determined by the current view zoom window
-        // This value shifts points to the left and right We calculate the
-        // offset by getting the view's starting x value, which is normalized.
-        // We then see how much time that offsets by multiplying that normalized
-        // value times the maximum X of our MSEG.
-        let offset = data.range.start() * self.max;
-        // Calculate the x-zoom scale to apply to points
-        let scale = 1f32 / ((data.range.end() - data.range.start()) * self.max);
-        let x = ((point.x - offset) * scale) * width;
-        Vec2::new(x, y)
-    }
+    // Calculate the x-offset determined by the current view zoom window
+    // This value shifts points to the left and right We calculate the
+    // offset by getting the view's starting x value, which is normalized.
+    // We then see how much time that offsets by multiplying that normalized
+    // value times the maximum X of our MSEG.
+    let offset = data.range.start() * max;
+    // Calculate the x-zoom scale to apply to points
+    let scale = 1f32 / ((data.range.end() - data.range.start()) * max);
+    let x = ((point.x - offset) * scale) * width;
+    let relative = Vec2::new(x, y);
+    // adjust to be absolute by adding the container coords
+    let bounds = {
+        let b = cx.cache.get_bounds(container);
+        Vec2::new(b.x, b.y)
+    };
+    relative + bounds
 }
 
 pub trait MsegGraphHandle<'a> {
@@ -345,4 +373,17 @@ impl<'a, V: View> MsegHandle<'a> for Handle<'a, V> {
 
         self
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gets_ui_point_from_data() {
+        //  ui_to_data_pos(cx, ui_point, max_data, container)
+    }
+
+    #[test]
+    fn gets_data_point_from_ui() {}
 }
