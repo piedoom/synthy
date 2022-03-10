@@ -123,15 +123,15 @@ where
                     x /= width;
                     match self.status {
                         ZoomerEvent::SetStart => {
-                            let x = x.max(0f32).min(*range.end() - SMALLEST_RANGE);
                             // Set the zoomer amount based on the mouse positioning
+                            let x = x.clamp(0f32, *range.end() - SMALLEST_RANGE);
                             if let Some(callback) = self.on_changing_range_start.take() {
                                 (callback)(cx, x);
                                 self.on_changing_range_start = Some(callback);
                             }
                         }
                         ZoomerEvent::SetEnd => {
-                            let x = x.min(1f32).max(*range.start() + SMALLEST_RANGE);
+                            let x = x.clamp(*range.start() + SMALLEST_RANGE, 1f32);
                             if let Some(callback) = self.on_changing_range_end.take() {
                                 (callback)(cx, x);
                                 self.on_changing_range_end = Some(callback);
@@ -174,7 +174,6 @@ where
 }
 
 pub trait ZoomerHandle<R> where R: Lens<Target = RangeInclusive<f32>> {
-    type View: View;
     fn on_changing_start<F>(self, callback: F) -> Self
     where
         F: 'static + Fn(&mut Context, f32);
@@ -183,12 +182,12 @@ pub trait ZoomerHandle<R> where R: Lens<Target = RangeInclusive<f32>> {
         F: 'static + Fn(&mut Context, f32);
 }
 
-impl<'a, V: View, R> ZoomerHandle<R> for Handle<'a, V>
+impl<'a, R> ZoomerHandle<R> for Handle<'a, Zoomer<R>>
 where
     R: Lens<Target = RangeInclusive<f32>>,
 {
-    type View = V;
-    fn on_changing_start<F: 'static + Fn(&mut Context, f32)>(self, callback: F) -> Self {
+    fn on_changing_start<F>(self, callback: F) -> Self 
+        where F: 'static + Fn(&mut Context, f32) {
         if let Some(zoomer) = self
             .cx
             .views
@@ -201,7 +200,8 @@ where
         self
     }
 
-    fn on_changing_end<F: 'static + Fn(&mut Context, f32)>(self, callback: F) -> Self {
+    fn on_changing_end<F>(self, callback: F) -> Self
+        where F: 'static + Fn(&mut Context, f32) {
         if let Some(zoomer) = self
             .cx
             .views

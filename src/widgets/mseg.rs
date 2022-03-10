@@ -86,7 +86,7 @@ where
                     }
                 },
                 MsegInternalEvent::OnChangingRangeEnd(x) => {
-                    if let Some(callback) = self.on_changing_range_start.take() {
+                    if let Some(callback) = self.on_changing_range_end.take() {
                         (callback)(cx, *x);
                         self.on_changing_range_end = Some(callback);
                     }
@@ -98,7 +98,6 @@ where
 
 pub trait MsegHandle<P, R> where P: Lens<Target = CurvePoints>,
 R: Lens<Target = RangeInclusive<f32>> {
-    type View: View;
     fn on_changing_range_start<F>(self, callback: F) -> Self
     where
         F: 'static + Fn(&mut Context, f32);
@@ -110,46 +109,39 @@ R: Lens<Target = RangeInclusive<f32>> {
         F: 'static + Fn(&mut Context, usize, Vec2);
 }
 
-impl<'a, V: View, P, R> MsegHandle<P, R> for Handle<'a, V>
+impl<'a, P, R> MsegHandle<P, R> for Handle<'a, Mseg<P,R>>
 where
 P: Lens<Target = CurvePoints>,
 R: Lens<Target = RangeInclusive<f32>>,
 {
-    type View = V;
-    fn on_changing_point<F: 'static + Fn(&mut Context, usize, Vec2)>(self, callback: F) -> Self {
-        if let Some(zoomer) = self
-            .cx
-            .views
-            .get_mut(&self.entity)
-            .and_then(|f| f.downcast_mut::<Mseg<P, R>>())
-        {
-            zoomer.on_changing_point = Some(Box::new(callback));
+    fn on_changing_point<F>(self, callback: F) -> Self 
+        where F: 'static + Fn(&mut Context, usize, Vec2) {
+        if let Some(view) = self.cx.views.get_mut(&self.entity) {
+            if let Some(zoomer) = view.downcast_mut::<Mseg<P, R>>() {
+                zoomer.on_changing_point = Some(Box::new(callback));
+            }
         }
 
         self
     }
 
-    fn on_changing_range_start<F: 'static + Fn(&mut Context, f32)>(self, callback: F) -> Self {
-        if let Some(zoomer) = self
-            .cx
-            .views
-            .get_mut(&self.entity)
-            .and_then(|f| f.downcast_mut::<Mseg<P, R>>())
-        {
-            zoomer.on_changing_range_start = Some(Box::new(callback));
+    fn on_changing_range_start<F>(self, callback: F) -> Self 
+        where F: 'static + Fn(&mut Context, f32) {
+        if let Some(view) = self.cx.views.get_mut(&self.entity) {
+            if let Some(zoomer) = view.downcast_mut::<Mseg<P, R>>() {
+                zoomer.on_changing_range_start = Some(Box::new(callback));
+            }
         }
 
         self
     }
 
-    fn on_changing_range_end<F: 'static + Fn(&mut Context, f32)>(self, callback: F) -> Self {
-        if let Some(zoomer) = self
-            .cx
-            .views
-            .get_mut(&self.entity)
-            .and_then(|f| f.downcast_mut::<Mseg<P, R>>())
-        {
-            zoomer.on_changing_range_end = Some(Box::new(callback));
+    fn on_changing_range_end<F>(self, callback: F) -> Self 
+        where F: 'static + Fn(&mut Context, f32) {
+        if let Some(view) = self.cx.views.get_mut(&self.entity) {
+            if let Some(zoomer) = view.downcast_mut::<Mseg<P, R>>() {
+                zoomer.on_changing_range_end = Some(Box::new(callback));
+            }
         }
 
         self
@@ -206,12 +198,12 @@ where
         // Window events to move points
         if let Some(ev) = event.message.downcast::<WindowEvent>() {
             match ev {
-                WindowEvent::MouseDown(button) => {
+                WindowEvent::MouseDown(button) => if *button == MouseButton::Left {
                     if self.active_point_id.is_some() {
                         self.is_dragging_point = true;
                     }
                 }
-                WindowEvent::MouseUp(button) => {
+                WindowEvent::MouseUp(button) => if *button == MouseButton::Left {
                     self.is_dragging_point = false;
                 }
                 WindowEvent::MouseMove(x, y) => {
