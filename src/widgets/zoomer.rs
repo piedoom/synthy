@@ -1,9 +1,8 @@
-use std::{marker::PhantomData, ops::RangeInclusive};
+use std::ops::RangeInclusive;
 
 use femtovg::{Paint, Path};
 use vizia::{
-    Actions, Binding, Color, Context, Data, Element, Entity, Handle, Lens, LensExt, Model,
-    MouseButton, Orientation, Press, PropSet, Release,
+    Actions, Binding, Color, Context, Element, Handle, Lens, LensExt, MouseButton,
     Units::{Percentage, Pixels, Stretch},
     View, WindowEvent, ZStack,
 };
@@ -14,47 +13,10 @@ pub struct Zoomer<L>
 where
     L: Lens<Target = RangeInclusive<f32>>,
 {
-    _phantom_data: PhantomData<L>,
+    range: L,
     status: ZoomerEvent,
     on_changing_range_end: Option<Box<dyn Fn(&mut Context, f32)>>,
     on_changing_range_start: Option<Box<dyn Fn(&mut Context, f32)>>,
-}
-
-#[derive(Clone, Debug, Lens, Data)]
-pub struct ZoomerDataInternal {
-    pub range: RangeInclusive<f32>,
-}
-
-impl Default for ZoomerDataInternal {
-    fn default() -> Self {
-        Self { range: 0f32..=1f32 }
-    }
-}
-
-impl Model for ZoomerDataInternal {
-    fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
-        if let Some(ev) = event.message.downcast::<ZoomerEventInternal>() {
-            // set min / max so that it is never out of range or invalid
-            self.range = match ev {
-                ZoomerEventInternal::SetViewRangeStart(x) => {
-                    let x = x.max(0f32).min(*self.range.end());
-                    x..=*self.range.end()
-                }
-                ZoomerEventInternal::SetViewRangeEnd(x) => {
-                    let x = x.max(*self.range.start()).min(1f32);
-                    *self.range.start()..=x
-                }
-            };
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum ZoomerEventInternal {
-    /// Set the normalized position of the right view
-    SetViewRangeEnd(f32),
-    /// Set the normalized position of the left view
-    SetViewRangeStart(f32),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -73,20 +35,12 @@ where
             on_changing_range_start: Default::default(),
             on_changing_range_end: Default::default(),
             status: ZoomerEvent::FinishSet,
-            _phantom_data: Default::default(),
+            range: lens,
         }
         .build2(cx, move |cx| {
             let parent_entity = cx.current;
-            if cx.data::<ZoomerDataInternal>().is_none() {
-                // Create some internal slider data (not exposed to the user)
-                ZoomerDataInternal {
-                    range: 0f32..=1f32,
-                    ..Default::default()
-                }
-                .build(cx);
-            }
 
-            Binding::new(cx, ZoomerDataInternal::root, move |cx, internal| {
+            Binding::new(cx, lens, move |cx, internal| {
                 ZStack::new(cx, |cx| {
                     // Active bar
                     Element::new(cx)
@@ -152,10 +106,6 @@ where
 
     fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
         if let Some(ev) = event.message.downcast::<ZoomerEvent>() {
-            match ev {
-                ZoomerEvent::SetStart | ZoomerEvent::SetEnd => cx.capture(),
-                ZoomerEvent::FinishSet => cx.release(),
-            }
             self.status = *ev;
         }
         #[allow(clippy::collapsible_match)]
@@ -163,27 +113,34 @@ where
             match ev {
                 WindowEvent::MouseMove(x, _y) => {
                     let width = cx.cache.get_width(cx.current);
+                    let range = *self.range.get(cx);
                     // adjust X to be relative
-                    let x = *x - cx.cache.get_bounds(cx.current).x;
+                    let mut x = *x - cx.cache.get_bounds(cx.current).x;
                     // get new data x
-                    let x = x / width;
+                    x /= width;
                     match self.status {
                         ZoomerEvent::SetStart => {
+                            cx.capture();
+
+                            let x = x.max(0f32).min(*range.end());
                             // Set the zoomer amount based on the mouse positioning
-                            cx.emit(ZoomerEventInternal::SetViewRangeStart(x));
                             if let Some(callback) = self.on_changing_range_start.take() {
                                 (callback)(cx, x);
                                 self.on_changing_range_start = Some(callback);
                             }
                         }
                         ZoomerEvent::SetEnd => {
-                            cx.emit(ZoomerEventInternal::SetViewRangeStart(x));
+                            cx.capture();
+
+                            let x = x.max(0f32).min(*range.end());
                             if let Some(callback) = self.on_changing_range_end.take() {
                                 (callback)(cx, x);
                                 self.on_changing_range_end = Some(callback);
                             }
                         }
-                        ZoomerEvent::FinishSet => (),
+                        ZoomerEvent::FinishSet => {
+                            cx.release();
+                        }
                     }
                 }
                 WindowEvent::MouseUp(button) => {
@@ -215,30 +172,31 @@ where
     }
 }
 
-pub trait ZoomerHandle<'a> {
+pub trait ZoomerHandle<'a, R, F>
+where
+    R: Lens<Target = RangeInclusive<f32>>,
+    F: 'static + Fn(&mut Context, f32),
+{
     type View: View;
-    fn on_changing_range_start<F, L>(self, callback: F) -> Self
+    fn on_changing_range_start(self, callback: F) -> Self
     where
-        F: 'static + Fn(&mut Context, f32),
-        L: Lens<Target = RangeInclusive<f32>>;
-    fn on_changing_range_end<F, L>(self, callback: F) -> Self
+        F: 'static + Fn(&mut Context, f32);
+    fn on_changing_range_end(self, callback: F) -> Self
     where
-        F: 'static + Fn(&mut Context, f32),
-        L: Lens<Target = RangeInclusive<f32>>;
+        F: 'static + Fn(&mut Context, f32);
 }
-impl<'a, V: View> ZoomerHandle<'a> for Handle<'a, V> {
+impl<'a, V: View, R, F> ZoomerHandle<'a, R, F> for Handle<'a, V>
+where
+    R: Lens<Target = RangeInclusive<f32>>,
+    F: 'static + Fn(&mut Context, f32),
+{
     type View = V;
-
-    fn on_changing_range_start<F, L>(self, callback: F) -> Self
-    where
-        F: 'static + Fn(&mut Context, f32),
-        L: Lens<Target = RangeInclusive<f32>>,
-    {
+    fn on_changing_range_start(self, callback: F) -> Self {
         if let Some(zoomer) = self
             .cx
             .views
             .get_mut(&self.entity)
-            .and_then(|f| f.downcast_mut::<Zoomer<L>>())
+            .and_then(|f| f.downcast_mut::<Zoomer<R>>())
         {
             zoomer.on_changing_range_start = Some(Box::new(callback));
         }
@@ -246,16 +204,12 @@ impl<'a, V: View> ZoomerHandle<'a> for Handle<'a, V> {
         self
     }
 
-    fn on_changing_range_end<F, L>(self, callback: F) -> Self
-    where
-        F: 'static + Fn(&mut Context, f32),
-        L: Lens<Target = RangeInclusive<f32>>,
-    {
+    fn on_changing_range_end(self, callback: F) -> Self {
         if let Some(zoomer) = self
             .cx
             .views
             .get_mut(&self.entity)
-            .and_then(|f| f.downcast_mut::<Zoomer<L>>())
+            .and_then(|f| f.downcast_mut::<Zoomer<R>>())
         {
             zoomer.on_changing_range_end = Some(Box::new(callback));
         }

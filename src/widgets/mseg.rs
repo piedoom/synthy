@@ -11,70 +11,25 @@ use vizia::*;
 /// The distance in pixels before a node is considered hovered
 const HOVER_RADIUS: f32 = 16f32;
 
-pub struct Mseg<L>
+pub struct Mseg<P, R>
 where
-    L: Lens<Target = CurvePoints>,
+    P: Lens<Target = CurvePoints>,
+    R: Lens<Target = RangeInclusive<f32>>,
 {
-    points: L,
+    points: P,
+    range: R,
     on_changing_point: Option<Box<dyn Fn(&mut Context, usize, Vec2)>>,
 }
 
-#[derive(Clone, Debug, Data)]
-pub struct MsegRangeInternal {
-    pub range: RangeInclusive<f32>,
-}
-
-impl Lens for MsegRangeInternal {
-    type Source = Self;
-
-    type Target = RangeInclusive<f32>;
-
-    fn view<O, F: FnOnce(Option<&Self::Target>) -> O>(&self, source: &Self::Source, map: F) -> O {
-        map(Some(&source.range))
-    }
-}
-
-impl Default for MsegRangeInternal {
-    fn default() -> Self {
+impl<P, R> Mseg<P, R>
+where
+    P: Lens<Target = CurvePoints>,
+    R: Lens<Target = RangeInclusive<f32>>,
+{
+    pub fn new(cx: &mut Context, points: P, range: R) -> Handle<Mseg<P, R>> {
         Self {
-            /// The current view section, describing the first and last view
-            /// points as normalized values between `0..=1`.
-            range: 0f32..=1f32,
-        }
-    }
-}
-
-impl Model for MsegRangeInternal {
-    fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
-        if let Some(ev) = event.message.downcast::<MsegRangeEventInternal>() {
-            // set min / max so that it is never out of range or invalid
-            self.range = match ev {
-                MsegRangeEventInternal::SetViewRangeStart(x) => {
-                    let x = x.max(0f32).min(*self.range.end());
-                    x..=*self.range.end()
-                }
-                MsegRangeEventInternal::SetViewRangeEnd(x) => {
-                    let x = x.max(*self.range.start()).min(1f32);
-                    *self.range.start()..=x
-                }
-            };
-        }
-    }
-}
-
-pub enum MsegRangeEventInternal {
-    SetViewRangeStart(f32),
-    SetViewRangeEnd(f32),
-}
-
-pub enum MsegEvent {
-    OnChangingPoint { index: usize, position: Vec2 },
-}
-
-impl<L: Lens<Target = CurvePoints>> Mseg<L> {
-    pub fn new(cx: &mut Context, lens: L) -> Handle<Mseg<L>> {
-        Self {
-            points: lens.clone(),
+            points,
+            range,
             on_changing_point: None,
         }
         .build2(cx, move |cx| {
@@ -85,54 +40,30 @@ impl<L: Lens<Target = CurvePoints>> Mseg<L> {
                 .cloned()
                 .unwrap_or_default();
 
-            if cx.data::<MsegRangeInternal>().is_none() {
-                MsegRangeInternal::default().build(cx);
-            }
-
-            MsegGraph::new(cx, lens)
-                .background_color(background_color)
-                .on_changing::<_, L>(|cx, i, v| {
-                    cx.emit(MsegEvent::OnChangingPoint {
-                        index: i,
-                        position: v,
-                    });
-                });
-            Zoomer::new(cx, cx.data::<MsegRangeInternal>().cloned().unwrap())
-                .on_changing_range_start::<_, MsegRangeInternal>(|cx, val| {
-                    cx.emit(MsegRangeEventInternal::SetViewRangeStart(val))
-                })
-                .on_changing_range_end::<_, MsegRangeInternal>(|cx, val| {
-                    cx.emit(MsegRangeEventInternal::SetViewRangeEnd(val))
-                });
+            MsegGraph::new(cx, points, range).background_color(background_color);
+            Zoomer::new(cx, range);
         })
     }
 }
 
-impl<L: Lens<Target = CurvePoints>> Model for Mseg<L> {
-    fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
-        if let Some(ev) = event.message.downcast::<MsegEvent>() {
-            match ev {
-                MsegEvent::OnChangingPoint { index, position } => {
-                    // use callback
-                    if let Some(callback) = self.on_changing_point.take() {
-                        (callback)(cx, *index, *position);
-                        self.on_changing_point = Some(callback);
-                    }
-                }
-            }
-        }
-    }
-}
-
-impl<'a, L: Lens<Target = CurvePoints>> View for Mseg<L> {
+impl<P, R> View for Mseg<P, R>
+where
+    P: Lens<Target = CurvePoints>,
+    R: Lens<Target = RangeInclusive<f32>>,
+{
     fn element(&self) -> Option<String> {
         Some("mseg".to_string())
     }
 }
 
 /// The visuals of the graph
-struct MsegGraph<L> {
-    points: L,
+struct MsegGraph<P, R>
+where
+    P: Lens<Target = CurvePoints>,
+    R: Lens<Target = RangeInclusive<f32>>,
+{
+    points: P,
+    range: R,
     /// The max length of this MSEG, usually representing `f32` seconds. (The
     /// minimum is always `0`).
     max: f32,
@@ -142,28 +73,34 @@ struct MsegGraph<L> {
     on_changing_point: Option<Box<dyn Fn(&mut Context, usize, Vec2)>>,
 }
 
-impl<L> MsegGraph<L>
+impl<P, R> MsegGraph<P, R>
 where
-    L: Lens<Target = CurvePoints>,
+    P: Lens<Target = CurvePoints>,
+    R: Lens<Target = RangeInclusive<f32>>,
 {
-    pub fn new(cx: &mut Context, lens: L) -> Handle<MsegGraph<L>> {
+    pub fn new(cx: &mut Context, points: P, range: R) -> Handle<MsegGraph<P, R>> {
         Self {
-            points: lens,
+            points,
             max: 8f32,
             active_point_id: None,
             is_dragging_point: false,
             on_changing_point: None,
+            range,
         }
         .build2(cx, |cx| {})
     }
 }
 
-impl<'a, L: Lens<Target = CurvePoints>> View for MsegGraph<L> {
+impl<P, R> View for MsegGraph<P, R>
+where
+    P: Lens<Target = CurvePoints>,
+    R: Lens<Target = RangeInclusive<f32>>,
+{
     fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
         let points = self.points.get(cx).clone();
         let ui_points = points
             .iter()
-            .map(|point| data_to_ui_pos(cx, point, self.max, cx.current));
+            .map(|point| data_to_ui_pos(cx, point, self.range, self.max, cx.current));
         // Window events to move points
         if let Some(ev) = event.message.downcast::<WindowEvent>() {
             match ev {
@@ -181,7 +118,8 @@ impl<'a, L: Lens<Target = CurvePoints>> View for MsegGraph<L> {
                         // Up to the user to drag the current point around
                         if let Some(callback) = self.on_changing_point.take() {
                             let active_id = self.active_point_id.unwrap();
-                            let new_v = ui_to_data_pos(cx, &current_pos, self.max, cx.current);
+                            let new_v =
+                                ui_to_data_pos(cx, &current_pos, self.range, self.max, cx.current);
                             (callback)(cx, active_id, new_v);
                             self.on_changing_point = Some(callback);
                         } // asdasdasdasd
@@ -231,34 +169,28 @@ impl<'a, L: Lens<Target = CurvePoints>> View for MsegGraph<L> {
 
         // points
         let points = &**self.points.get(cx);
-        let ui_points = points
+        let ui_points: Vec<(_, _)> = points
             .iter()
-            .map(|point| data_to_ui_pos(cx, point, self.max, cx.current));
+            .enumerate()
+            .map(|point| {
+                (
+                    point.0,
+                    data_to_ui_pos(cx, point.1, self.range, self.max, cx.current),
+                )
+            })
+            .collect();
 
         // Draw background rect
         let mut path = Path::new();
         path.rect(0f32, 0f32, width, height);
         canvas.fill_path(&mut path, Paint::color(background_color.into()));
 
-        // Draw points
+        // Draw lines
         let mut lines = Path::new();
-
-        for (i, point) in ui_points.enumerate() {
-            if i == 0 {
+        for (i, point) in &ui_points {
+            if i == &0 {
                 lines.move_to(point.x, point.y);
             }
-            // Main node
-            let mut path = Path::new();
-            path.circle(point.x, point.y, 4.0);
-
-            // check for hover
-            let mut color = Color::white();
-            if self.active_point_id.map(|x| x == i).unwrap_or_default() {
-                color = Color::rgb(255, 0, 0);
-            }
-
-            canvas.fill_path(&mut path, Paint::color(color.into()));
-
             // Lines
             lines.line_to(point.x, point.y);
         }
@@ -266,12 +198,32 @@ impl<'a, L: Lens<Target = CurvePoints>> View for MsegGraph<L> {
             &mut lines,
             Paint::color(Color::white().into()).with_line_width(2f32),
         );
+
+        // Draw points
+        for (i, point) in &ui_points {
+            // Main node
+            let mut path = Path::new();
+            path.circle(point.x, point.y, 4.0);
+
+            // check for hover
+            let mut color = Color::white();
+            if self.active_point_id.map(|x| &x == i).unwrap_or_default() {
+                color = Color::rgb(255, 0, 0);
+            }
+
+            canvas.fill_path(&mut path, Paint::color(color.into()));
+        }
     }
 }
 
 /// Convert a screen value to its data position
-pub fn ui_to_data_pos(cx: &Context, ui_point: &Vec2, max_data: f32, container: Entity) -> Vec2 {
-    let data = cx.data::<MsegRangeInternal>().unwrap();
+pub fn ui_to_data_pos(
+    cx: &Context,
+    ui_point: &Vec2,
+    range_data: impl Lens<Target = RangeInclusive<f32>>,
+    max_data: f32,
+    container: Entity,
+) -> Vec2 {
     let (width, height) = (
         cx.cache.get_width(container),
         cx.cache.get_height(container),
@@ -287,12 +239,18 @@ pub fn ui_to_data_pos(cx: &Context, ui_point: &Vec2, max_data: f32, container: E
     // Scale points to fit within `(x,y) = ([0..=max], [0..=1])`
     // This assumes mouse coordinates are relative and not absolute. Which is possibly not true!
     let y = (height - ui_point.y) / height;
-    let offset_data = data.range.start() * max_data;
-    let x = ((ui_point.x / width) * (data.range.end() - data.range.start())) + offset_data;
+    let range = *range_data.get(cx);
+    let offset_data = range.start() * max_data;
+    let x = ((ui_point.x / width) * (range.end() - range.start())) + offset_data;
     Vec2::new(x, y)
 }
-pub fn data_to_ui_pos(cx: &Context, point: &CurvePoint, max: f32, container: Entity) -> Vec2 {
-    let data = cx.data::<MsegRangeInternal>().unwrap();
+pub fn data_to_ui_pos(
+    cx: &Context,
+    point: &CurvePoint,
+    range_data: impl Lens<Target = RangeInclusive<f32>>,
+    max: f32,
+    container: Entity,
+) -> Vec2 {
     let (width, height) = (
         cx.cache.get_width(container),
         cx.cache.get_height(container),
@@ -306,9 +264,10 @@ pub fn data_to_ui_pos(cx: &Context, point: &CurvePoint, max: f32, container: Ent
     // offset by getting the view's starting x value, which is normalized.
     // We then see how much time that offsets by multiplying that normalized
     // value times the maximum X of our MSEG.
-    let offset = data.range.start() * max;
+    let range = *range_data.get(cx);
+    let offset = range.start() * max;
     // Calculate the x-zoom scale to apply to points
-    let scale = 1f32 / ((data.range.end() - data.range.start()) * max);
+    let scale = 1f32 / ((range.end() - range.start()) * max);
     let x = ((point.x - offset) * scale) * width;
     let relative = Vec2::new(x, y);
     // adjust to be absolute by adding the container coords
@@ -317,62 +276,6 @@ pub fn data_to_ui_pos(cx: &Context, point: &CurvePoint, max: f32, container: Ent
         Vec2::new(b.x, b.y)
     };
     relative + bounds
-}
-
-pub trait MsegGraphHandle<'a> {
-    type View: View;
-    fn on_changing<F, L>(self, callback: F) -> Self
-    where
-        F: 'static + Fn(&mut Context, usize, Vec2),
-        L: Lens<Target = CurvePoints>;
-}
-impl<'a, V: View> MsegGraphHandle<'a> for Handle<'a, V> {
-    type View = V;
-
-    fn on_changing<F, L>(self, callback: F) -> Self
-    where
-        F: 'static + Fn(&mut Context, usize, Vec2),
-        L: Lens<Target = CurvePoints>,
-    {
-        if let Some(mseg) = self
-            .cx
-            .views
-            .get_mut(&self.entity)
-            .and_then(|f| f.downcast_mut::<MsegGraph<L>>())
-        {
-            mseg.on_changing_point = Some(Box::new(callback));
-        }
-
-        self
-    }
-}
-
-pub trait MsegHandle<'a> {
-    type View: View;
-    fn on_changing_point<F, L>(self, callback: F) -> Self
-    where
-        F: 'static + Fn(&mut Context, usize, Vec2),
-        L: Lens<Target = CurvePoints>;
-}
-impl<'a, V: View> MsegHandle<'a> for Handle<'a, V> {
-    type View = V;
-
-    fn on_changing_point<F, L>(self, callback: F) -> Self
-    where
-        F: 'static + Fn(&mut Context, usize, Vec2),
-        L: Lens<Target = CurvePoints>,
-    {
-        if let Some(mseg) = self
-            .cx
-            .views
-            .get_mut(&self.entity)
-            .and_then(|f| f.downcast_mut::<Mseg<L>>())
-        {
-            mseg.on_changing_point = Some(Box::new(callback));
-        }
-
-        self
-    }
 }
 
 #[cfg(test)]

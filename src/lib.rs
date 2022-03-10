@@ -49,6 +49,14 @@ pub enum SynthyFloatParam {
     FilterQ,
 }
 
+#[derive(Copy, Clone)]
+pub enum SynthyEnvParam {
+    AEnv,
+    BEnv,
+    Env,
+    NoiseEnv,
+}
+
 #[derive(Params)]
 pub struct SynthyParams {
     #[id = "a_mod"]

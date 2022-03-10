@@ -2,11 +2,12 @@ use crate::{
     util::CurvePoints,
     widgets::{
         mseg::{Mseg, MsegHandle},
-        zoomer::Zoomer,
+        zoomer::{Zoomer, ZoomerHandle},
     },
     SynthyFloatParam, SynthyParams,
 };
 use fundsp::math::xerp;
+use glam::Vec2;
 use nih_plug::prelude::*;
 use std::{ops::RangeInclusive, pin::Pin, sync::Arc};
 use vizia::*;
@@ -20,11 +21,14 @@ pub struct AppData {
     pub params: Pin<Arc<SynthyParams>>,
     #[lens(ignore)]
     pub context: Arc<dyn GuiContext>,
-    zoom_view: RangeInclusive<f32>,
+    env_zoom_view: RangeInclusive<f32>,
 }
 
 pub enum SynthyEvent {
     SetFloatParam { param: SynthyFloatParam, value: f32 },
+    SetEnvStart { value: f32 },
+    SetEnvEnd { value: f32 },
+    SetEnvPoint { index: usize, point: Vec2 },
 }
 
 impl Model for AppData {
@@ -58,6 +62,25 @@ impl Model for AppData {
                         set.set_parameter_normalized(&self.params.filter_q, *value)
                     }
                 },
+                SynthyEvent::SetEnvPoint { index, point } => {
+                    AppData::params.map(|x| {
+                        {
+                            //
+                            if let Ok(points) = x.env.try_write() {
+                                if let Some(point) = points.get_mut(*index) {
+                                    point.x = point.x;
+                                    point.y = point.y;
+                                }
+                            }
+                        }
+                    });
+                }
+                SynthyEvent::SetEnvStart { value } => {
+                    self.env_zoom_view = *value..=*self.env_zoom_view.end();
+                }
+                SynthyEvent::SetEnvEnd { value } => {
+                    self.env_zoom_view = *self.env_zoom_view.end()..=*value;
+                }
             }
         }
     }
@@ -83,7 +106,7 @@ pub fn ui(cx: &mut Context, params: Pin<Arc<SynthyParams>>, context: Arc<dyn Gui
     AppData {
         params,
         context: context.clone(),
-        zoom_view: 0f32..=1f32,
+        env_zoom_view: 0f32..=1f32,
     }
     .build(cx);
 
@@ -104,19 +127,12 @@ pub fn ui(cx: &mut Context, params: Pin<Arc<SynthyParams>>, context: Arc<dyn Gui
         Mseg::new(
             cx,
             AppData::params.map(|params| params.env.read().unwrap().clone()),
-        );
-        // .on_changing_point::<_, _>(|cx, index, pos| {
-        //     AppData::params.map(|x| {
-        //         {
-        //             //
-        //             if let Ok(points) = x.env.try_write() {
-        //                 if let Some(point) = points.get_mut(index) {
-        //                     point.x = pos.x;
-        //                     point.y = pos.y;
-        //                 }
-        //             }
-        //         }
-        //     });
+            AppData::env_zoom_view,
+        )
+        .on_changing_range_start(|cx, x| cx.emit(SynthyEvent::SetEnvStart { value: x }))
+        .on_changing_range_end(|cx, x| cx.emit(SynthyEvent::SetEnvEnd { value: x }));
+        // .on_changing_point(|cx, index, point| {
+        //     cx.emit(SynthyEvent::SetEnvPoint { index, point });
         // });
 
         //crate::widgets::zoomer::Zoomer::new(cx, AppData::zoom_view);
