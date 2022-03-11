@@ -1,155 +1,17 @@
-//! Multi-stage envelope generator widget
-
-use std::{cmp::Ordering, ops::RangeInclusive};
-
-use super::zoomer::{Zoomer, ZoomerHandle};
-use crate::util::{CurvePoint, CurvePoints};
-use femtovg::{Paint, Path};
+use std::{ops::RangeInclusive, cmp::Ordering};
+use femtovg::{Path, Paint};
 use glam::Vec2;
 use vizia::*;
+use crate::util::{CurvePoints, CurvePoint};
+
 
 /// The distance in pixels before a node is considered hovered
 const HOVER_RADIUS: f32 = 16f32;
-
-enum MsegInternalEvent {
-    OnChangingRangeStart(f32),
-    OnChangingRangeEnd(f32),
-}
-
-
-pub struct Mseg<P, R>
-where
-    P: Lens<Target = CurvePoints>,
-    R: Lens<Target = RangeInclusive<f32>>,
-{
-    points: P,
-    range: R,
-    on_changing_point: Option<Box<dyn Fn(&mut Context, usize, Vec2)>>,
-    on_changing_range_start: Option<Box<dyn Fn(&mut Context, f32)>>,
-    on_changing_range_end: Option<Box<dyn Fn(&mut Context, f32)>>,
-}
-
-impl<P, R> Mseg<P, R>
-where
-    P: Lens<Target = CurvePoints>,
-    R: Lens<Target = RangeInclusive<f32>>,
-{
-    pub fn new(
-        cx: &mut Context,
-        points: P,
-        range: R,
-    ) -> Handle<Mseg<P, R>> {
-        Self {
-            points: points.clone(),
-            range: range.clone(),
-            on_changing_point: None,
-            on_changing_range_start: None,
-            on_changing_range_end: None,
-        }
-        .build2(cx, |cx| {
-            let background_color: Color = cx
-                .style
-                .background_color
-                .get(cx.current)
-                .cloned()
-                .unwrap_or_default();
-
-            MsegGraph::new(cx, points, range.clone()).background_color(background_color);
-            Zoomer::new(
-                cx,
-                range.clone(),
-            )
-            .on_changing_start(|cx, x| 
-                cx.emit(MsegInternalEvent::OnChangingRangeStart(x)))
-            .on_changing_end(|cx, x|
-                cx.emit(MsegInternalEvent::OnChangingRangeEnd(x)));
-        })
-    }
-}
-
-impl<P, R> View for Mseg<P, R>
-where
-    P: Lens<Target = CurvePoints>,
-    R: Lens<Target = RangeInclusive<f32>>,
-{
-    fn element(&self) -> Option<String> {
-        Some("mseg".to_string())
-    }
-
-    fn event(&mut self, cx: &mut Context, event: &mut Event) {
-        if let Some(ev) = event.message.downcast::<MsegInternalEvent>() {
-            match ev {
-                MsegInternalEvent::OnChangingRangeStart(x) => {
-                    if let Some(callback) = self.on_changing_range_start.take() {
-                        (callback)(cx, *x);
-                        self.on_changing_range_start = Some(callback);
-                    }
-                },
-                MsegInternalEvent::OnChangingRangeEnd(x) => {
-                    if let Some(callback) = self.on_changing_range_end.take() {
-                        (callback)(cx, *x);
-                        self.on_changing_range_end = Some(callback);
-                    }
-                },
-            }
-        }
-    }
-}
-
-pub trait MsegHandle<P, R> where P: Lens<Target = CurvePoints>,
-R: Lens<Target = RangeInclusive<f32>> {
-    fn on_changing_range_start<F>(self, callback: F) -> Self
-    where
-        F: 'static + Fn(&mut Context, f32);
-    fn on_changing_range_end<F>(self, callback: F) -> Self
-    where
-        F: 'static + Fn(&mut Context, f32);
-    fn on_changing_point<F>(self, callback: F) -> Self
-    where
-        F: 'static + Fn(&mut Context, usize, Vec2);
-}
-
-impl<'a, P, R> MsegHandle<P, R> for Handle<'a, Mseg<P,R>>
-where
-P: Lens<Target = CurvePoints>,
-R: Lens<Target = RangeInclusive<f32>>,
-{
-    fn on_changing_point<F>(self, callback: F) -> Self 
-        where F: 'static + Fn(&mut Context, usize, Vec2) {
-        if let Some(view) = self.cx.views.get_mut(&self.entity) {
-            if let Some(zoomer) = view.downcast_mut::<Mseg<P, R>>() {
-                zoomer.on_changing_point = Some(Box::new(callback));
-            }
-        }
-
-        self
-    }
-
-    fn on_changing_range_start<F>(self, callback: F) -> Self 
-        where F: 'static + Fn(&mut Context, f32) {
-        if let Some(view) = self.cx.views.get_mut(&self.entity) {
-            if let Some(zoomer) = view.downcast_mut::<Mseg<P, R>>() {
-                zoomer.on_changing_range_start = Some(Box::new(callback));
-            }
-        }
-
-        self
-    }
-
-    fn on_changing_range_end<F>(self, callback: F) -> Self 
-        where F: 'static + Fn(&mut Context, f32) {
-        if let Some(view) = self.cx.views.get_mut(&self.entity) {
-            if let Some(zoomer) = view.downcast_mut::<Mseg<P, R>>() {
-                zoomer.on_changing_range_end = Some(Box::new(callback));
-            }
-        }
-
-        self
-    }
-}
+/// The distance in seconds before two points cannot get closer
+const MIN_RESOLUTION: f32 = 0.01f32;
 
 /// The visuals of the graph
-struct MsegGraph<P, R>
+pub(crate) struct MsegGraph<P, R>
 where
     P: Lens<Target = CurvePoints>,
     R: Lens<Target = RangeInclusive<f32>>,
@@ -163,7 +25,8 @@ where
     active_point_id: Option<usize>,
     is_dragging_point: bool,
     on_changing_point: Option<Box<dyn Fn(&mut Context, usize, Vec2)>>,
-    
+    on_remove_point: Option<Box<dyn Fn(&mut Context, usize)>>,
+    on_insert_point: Option<Box<dyn Fn(&mut Context, usize, Vec2)>>,
 }
 
 impl<P, R> MsegGraph<P, R>
@@ -179,7 +42,8 @@ where
             is_dragging_point: false,
             on_changing_point: None,
             range,
-            
+            on_remove_point: None,
+            on_insert_point: None,
         }
         .build2(cx, |cx| {})
     }
@@ -190,20 +54,45 @@ where
     P: Lens<Target = CurvePoints>,
     R: Lens<Target = RangeInclusive<f32>>,
 {
+    fn element(&self) -> Option<String> {
+        Some("mseg-graph".to_string())
+    }
+    
     fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
         let points = self.points.get(cx).clone();
         let ui_points = points
             .iter()
-            .map(|point| data_to_ui_pos(cx, point, self.range.clone(), self.max, cx.current));
+            .map(|point| data_to_ui_pos(cx, Vec2::new(point.x, point.y), self.range.clone(), self.max, cx.current));
         // Window events to move points
         if let Some(ev) = event.message.downcast::<WindowEvent>() {
             match ev {
-                WindowEvent::MouseDown(button) => if *button == MouseButton::Left {
-                    if self.active_point_id.is_some() {
-                        self.is_dragging_point = true;
+                WindowEvent::MouseDown(button) => {
+                    match button {
+                        MouseButton::Left => {
+                            if self.active_point_id.is_some() {
+                                cx.capture();
+                                self.is_dragging_point = true;
+                            } else {
+                                // TODO: create a new point
+                            }
+                        },
+                        MouseButton::Right => {
+                            // Delete a currently active point 
+                            if let Some(index) = self.active_point_id {
+                                cx.release();
+                                self.is_dragging_point = false;
+                                if let Some(callback) = self.on_remove_point.take() {
+                                    (callback)(cx, index);
+                                    self.on_remove_point = Some(callback);
+                                }
+                            }
+                        },
+                        _ => ()
                     }
+                    
                 }
                 WindowEvent::MouseUp(button) => if *button == MouseButton::Left {
+                    cx.release();
                     self.is_dragging_point = false;
                 }
                 WindowEvent::MouseMove(x, y) => {
@@ -212,13 +101,26 @@ where
                         // Up to the user to drag the current point around
                         if let Some(callback) = self.on_changing_point.take() {
                             let active_id = self.active_point_id.unwrap();
-                            let new_v = ui_to_data_pos(
-                                cx,
-                                &current_pos,
-                                self.range.clone(),
-                                self.max,
-                                cx.current,
-                            );
+                            let mut new_v =  if active_id != 0 {
+                                ui_to_data_pos(
+                                    cx,
+                                    &current_pos,
+                                    self.range.clone(),
+                                    self.max,
+                                    cx.current,
+                                )
+                            } else {Vec2::ZERO};
+                            if active_id == points.len() - 1 {
+                                new_v.y = 0f32;
+                            }
+
+                            // Clamp the point (and check for left and right bounds)
+                            let right_bound = points.get(active_id + 1).map(|p| p.x).unwrap_or(self.max) - MIN_RESOLUTION;
+                            let left_bound = points.get(active_id - 1).map(|p| p.x).unwrap_or(0f32) + MIN_RESOLUTION;
+                            let new_v = new_v.clamp(Vec2::new(left_bound, 0f32), Vec2::new(right_bound, 1f32));
+
+                            
+
                             (callback)(cx, active_id, new_v);
                             self.on_changing_point = Some(callback);
                         } // asdasdasdasd
@@ -265,6 +167,11 @@ where
             .get(cx.current)
             .cloned()
             .unwrap_or_default();
+        let line_color: Color = cx.style.border_color.get(cx.current)
+            .cloned()
+            .unwrap_or_default();
+        let active_color: Color = cx.style.font_color.get(cx.current).cloned().unwrap_or_default();
+
 
         // points
         let points = &**self.points.get(cx);
@@ -274,7 +181,7 @@ where
             .map(|point| {
                 (
                     point.0,
-                    data_to_ui_pos(cx, point.1, self.range.clone(), self.max, cx.current),
+                    data_to_ui_pos(cx, Vec2::new(point.1.x, point.1.y), self.range.clone(), self.max, cx.current),
                 )
             })
             .collect();
@@ -295,22 +202,21 @@ where
         }
         canvas.stroke_path(
             &mut lines,
-            Paint::color(Color::white().into()).with_line_width(2f32),
+            Paint::color(line_color.into()).with_line_width(2f32),
         );
 
         // Draw points
         for (i, point) in &ui_points {
             // Main node
-            let mut path = Path::new();
+            let mut path = Path::new();           
             path.circle(point.x, point.y, 4.0);
-
+            canvas.fill_path(&mut path, Paint::color(line_color.into()));
             // check for hover
-            let mut color = Color::white();
             if self.active_point_id.map(|x| &x == i).unwrap_or_default() {
-                color = Color::rgb(255, 0, 0);
+                let mut path = Path::new();
+                path.circle(point.x, point.y, 8.0);
+                canvas.stroke_path(&mut path, Paint::color(active_color.into()).with_line_width(2f32));
             }
-
-            canvas.fill_path(&mut path, Paint::color(color.into()));
         }
     }
 }
@@ -340,12 +246,13 @@ pub fn ui_to_data_pos(
     let y = (height - ui_point.y) / height;
     let range = range_data.get(cx);
     let offset_data = range.start() * max_data;
-    let x = ((ui_point.x / width) * (range.end() - range.start())) + offset_data;
+    let scale = ((range.end() - range.start()) * max_data);
+    let x = ((ui_point.x / width) * scale) + offset_data;
     Vec2::new(x, y)
 }
 pub fn data_to_ui_pos(
     cx: &Context,
-    point: &CurvePoint,
+    point: Vec2,
     range_data: impl Lens<Target = RangeInclusive<f32>>,
     max: f32,
     container: Entity,
@@ -388,4 +295,52 @@ mod tests {
 
     #[test]
     fn gets_data_point_from_ui() {}
+}
+
+pub trait MsegGraphHandle<P, R> where P: Lens<Target = CurvePoints>,
+R: Lens<Target = RangeInclusive<f32>> {
+    fn on_changing_point<F>(self, callback: F) -> Self
+    where
+        F: 'static + Fn(&mut Context, usize, Vec2);
+    fn on_insert_point<F>(self, callback: F) -> Self
+    where
+        F: 'static + Fn(&mut Context, usize, Vec2);
+    fn on_remove_point<F>(self, callback: F) -> Self
+    where
+        F: 'static + Fn(&mut Context, usize);
+}
+
+impl<'a, P, R> MsegGraphHandle<P, R> for Handle<'a, MsegGraph<P,R>>
+where
+P: Lens<Target = CurvePoints>,
+R: Lens<Target = RangeInclusive<f32>>,
+{
+    fn on_changing_point<F>(self, callback: F) -> Self 
+        where F: 'static + Fn(&mut Context, usize, Vec2) {
+        if let Some(view) = self.cx.views.get_mut(&self.entity) {
+            if let Some(mseg_graph) = view.downcast_mut::<MsegGraph<P, R>>() {
+                mseg_graph.on_changing_point = Some(Box::new(callback));
+            }
+        }
+        self
+    }
+    fn on_insert_point<F>(self, callback: F) -> Self 
+        where F: 'static + Fn(&mut Context, usize, Vec2) {
+        if let Some(view) = self.cx.views.get_mut(&self.entity) {
+            if let Some(mseg_graph) = view.downcast_mut::<MsegGraph<P, R>>() {
+                mseg_graph.on_insert_point = Some(Box::new(callback));
+            }
+        }
+
+        self
+    }
+    fn on_remove_point<F>(self, callback: F) -> Self 
+        where F: 'static + Fn(&mut Context, usize) {
+        if let Some(view) = self.cx.views.get_mut(&self.entity) {
+            if let Some(mseg_graph) = view.downcast_mut::<MsegGraph<P, R>>() {
+                mseg_graph.on_remove_point = Some(Box::new(callback));
+            }
+        }
+        self
+    }
 }

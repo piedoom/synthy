@@ -9,17 +9,27 @@ knob .tick {
     background-color: #eeece4be;
 }
 knob .track {
-    background-color: #ffb74d;
+    background-color: #ad3af5;
 }
 mseg {
-    height: 150px;
+    height: 100px;
     background-color: #170a1f;
 }
-
+mseg-graph {
+    border-color: #ad3af5;
+    color: #ffd000;
+}
 zoomer {
-    background-color: #7610b6;
+    background-color: #1e1125;
+}
+zoomer .bar {
+    background-color: #2f1d38;
+}
+zoomer .handle {
+    background-color: #6e2197;
+    border-color: #ffffff5b;
 }
 label {
     width: 1s;
-    color: white;
+    color: #ffffff;
 }
