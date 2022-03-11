@@ -1,18 +1,11 @@
 use crate::{
-    util::CurvePoints,
-    widgets::{
-        mseg::{Mseg, MsegHandle},
-        zoomer::Zoomer,
-    },
+    widgets::mseg::{Mseg, MsegHandle},
     SynthyEnvParam, SynthyFloatParam, SynthyParams,
 };
-use fundsp::math::xerp;
 use glam::Vec2;
 use nih_plug::prelude::*;
 use std::{ops::RangeInclusive, pin::Pin, sync::Arc};
 use vizia::*;
-
-use self::app_data_derived_lenses::params as ViziaParams;
 
 const STYLE: &str = include_str!("style.css");
 
@@ -216,6 +209,7 @@ pub fn ui(cx: &mut Context, params: Pin<Arc<SynthyParams>>, context: Arc<dyn Gui
                 cx,
                 AppData::params.map(|params| params.clone().a_env.read().unwrap().clone()),
                 AppData::a_env_zoom_view,
+                8f32,
             )
             .on_changing_range_start(|cx, x| {
                 cx.emit(SynthyEvent::SetEnvStart {
@@ -276,6 +270,7 @@ pub fn ui(cx: &mut Context, params: Pin<Arc<SynthyParams>>, context: Arc<dyn Gui
                 cx,
                 AppData::params.map(|params| params.clone().b_env.read().unwrap().clone()),
                 AppData::b_env_zoom_view,
+                8f32,
             )
             .on_changing_range_start(|cx, x| {
                 cx.emit(SynthyEvent::SetEnvStart {
@@ -315,6 +310,7 @@ pub fn ui(cx: &mut Context, params: Pin<Arc<SynthyParams>>, context: Arc<dyn Gui
             cx,
             AppData::params.map(|params| params.clone().env.read().unwrap().clone()),
             AppData::env_zoom_view,
+            8f32,
         )
         .on_changing_range_start(|cx, x| {
             cx.emit(SynthyEvent::SetEnvStart {

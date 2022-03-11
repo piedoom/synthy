@@ -3,10 +3,12 @@ use std::ops::RangeInclusive;
 use femtovg::{Paint, Path};
 use glam::Vec2;
 use vizia::{
-    Actions, Binding, Color, Context, Element, Handle, Lens, LensExt, MouseButton,
+    Actions, Binding, Context, Element, Handle, Lens, LensExt, MouseButton,
     Units::{Percentage, Pixels, Stretch},
     View, WindowEvent, ZStack,
 };
+
+use super::mseg::RangeCallback;
 
 const HANDLE_SIZE: f32 = 16.0;
 const SMALLEST_RANGE: f32 = 0.1;
@@ -17,7 +19,7 @@ where
 {
     range: R,
     status: ZoomerEvent,
-    on_changing_both: Option<Box<dyn Fn(&mut Context, RangeInclusive<f32>)>>,
+    on_changing_both: Option<RangeCallback>,
     on_changing_end: Option<Box<dyn Fn(&mut Context, f32)>>,
     on_changing_start: Option<Box<dyn Fn(&mut Context, f32)>>,
 }
@@ -107,7 +109,7 @@ where
         .build2(cx, |cx| {
             let parent_entity = cx.current;
 
-            Binding::new(cx, range.clone(), move |cx, internal| {
+            Binding::new(cx, range.clone(), move |cx, _internal| {
                 ZStack::new(cx, |cx| {
                     // Bar
                     Element::new(cx)

@@ -1,4 +1,4 @@
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, RangeInclusive, Sub};
 
 use fundsp::math::lerp;
 
@@ -22,17 +22,18 @@ pub fn xlerp(a: f32, b: f32, t: f32, curve: f32) -> f32 {
     assert!((0f32..=1f32).contains(&t));
     assert!((-1f32..=1f32).contains(&curve));
 
-    let exp = match curve == -1f32 {
+    match curve == -1f32 {
         // We match for a curve of -1 as it would otherwise be undefined
         true => 0f32,
-        false => match curve > 0f32 {
-            true => 1f32 - curve,
-            false => 1f32 / (1f32 - f32::abs(curve)),
-        },
-    };
-    let adjusted = t.powf(exp);
-
-    lerp(a, b, adjusted)
+        false => {
+            let exp = match curve > 0f32 {
+                true => 1f32 - curve,
+                false => 1f32 / (1f32 - f32::abs(curve)),
+            };
+            let adjusted = t.powf(exp);
+            lerp(a, b, adjusted)
+        }
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -79,9 +80,26 @@ impl From<(f32, f32, f32)> for CurvePoint {
     }
 }
 
+pub trait RangeExt<T>
+where
+    T: Sub<Output = T> + Copy,
+{
+    fn width(&self) -> T;
+}
+
+impl<T> RangeExt<T> for RangeInclusive<T>
+where
+    T: Sub<Output = T> + Copy,
+{
+    fn width(&self) -> T {
+        *self.end() - *self.start()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_approx_eq::assert_approx_eq;
 
     #[test]
     fn linear_xlerp() {
@@ -115,5 +133,15 @@ mod tests {
         let v = xlerp(0f32, 2f32, 0.6f32, -1.0f32);
         // Obtain the approximate value from Desmos to compare
         assert_eq!(v, 0f32);
+    }
+
+    #[test]
+    fn positive_range_width() {
+        assert_approx_eq!((0.2f32..=0.8).width(), 0.6);
+    }
+
+    #[test]
+    fn negative_range_width() {
+        assert_approx_eq!((-0.2f32..=0.2).width(), 0.4);
     }
 }

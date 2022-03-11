@@ -41,7 +41,7 @@ impl Editor for ViziaEditor {
         (SIZE.0, SIZE.1)
     }
 
-    fn set_scale_factor(&self, factor: f32) -> bool {
+    fn set_scale_factor(&self, _factor: f32) -> bool {
         true
     }
 }

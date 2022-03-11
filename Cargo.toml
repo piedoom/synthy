@@ -25,3 +25,6 @@ atomic_float = "0.1"
 vizia = { git = "https://github.com/vizia/vizia", features = ["baseview"], default-features = false }
 serde = "1"
 femtovg = "*"
+
+[dev-dependencies]
+assert_approx_eq = "1"

@@ -9,15 +9,14 @@ use fundsp::hacker::*;
 use nih_plug::{nih_export_vst3, prelude::*, util::midi_note_to_freq};
 use num_derive::FromPrimitive;
 use std::{
+    fmt::Display,
     pin::Pin,
     sync::{Arc, RwLock},
-    time::Duration,
 };
 use util::{CurvePoint, CurvePoints};
 
 type Note = u8;
 type Velocity = u8;
-type Stage = usize;
 
 struct Synthy {
     audio: Box<dyn AudioUnit64 + Send + Sync>,
@@ -40,6 +39,24 @@ struct NoteInfo {
 }
 
 pub struct SynthyEditor {}
+
+pub enum SynthyOp {
+    A,
+    B,
+}
+
+impl Display for SynthyOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::A => "a",
+                Self::B => "b",
+            }
+        )
+    }
+}
 
 #[derive(Copy, Clone)]
 pub enum SynthyFloatParam {
