@@ -1,4 +1,4 @@
-use crate::util::CurvePoints;
+use crate::util::{CurvePoints, StyleExt};
 use femtovg::{Paint, Path};
 use glam::Vec2;
 use std::{cmp::Ordering, ops::RangeInclusive};
@@ -81,10 +81,6 @@ where
     P: Lens<Target = CurvePoints>,
     R: Lens<Target = RangeInclusive<f32>>,
 {
-    fn element(&self) -> Option<String> {
-        Some("mseg-graph".to_string())
-    }
-
     fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
         let points = self.points.get(cx).clone();
         let ui_points = points.iter().map(|point| {
@@ -205,19 +201,9 @@ where
             cx.cache.get_width(cx.current),
             cx.cache.get_height(cx.current),
         );
-        let background_color: Color = cx
-            .style
-            .background_color
-            .get(cx.current)
-            .cloned()
-            .unwrap_or_default();
+        let background_color: Color = cx.style.background_color(cx.current);
+        let active_color: Color = cx.style.border_color(cx.current);
         let line_color: Color = cx
-            .style
-            .border_color
-            .get(cx.current)
-            .cloned()
-            .unwrap_or_default();
-        let active_color: Color = cx
             .style
             .font_color
             .get(cx.current)

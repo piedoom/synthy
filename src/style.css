@@ -15,9 +15,9 @@ mseg {
     height: 100px;
     background-color: #170a1f;
 }
-mseg-graph {
-    border-color: #ad3af5;
-    color: #ffd000;
+mseg .graph {
+    color: #ad3af5;
+    border-color: #ffd000;
 }
 zoomer {
     background-color: #1e1125;
@@ -35,7 +35,16 @@ axis {
     width: 200px;
     height: 200px;
 }
+axis .point {
+    background-color: #ad3af5;
+    border-color: #ffd000;
+}
+
 label {
     width: 1s;
     color: #ffffff;
+}
+slider-discrete {
+    background-color: #170a1f;
+    color: #ad3af5;
 }

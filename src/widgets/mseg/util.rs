@@ -2,6 +2,8 @@ use glam::Vec2;
 use std::ops::RangeInclusive;
 use vizia::*;
 
+use crate::util::RangeExt;
+
 /// Convert a screen value to its data position
 pub fn ui_to_data_pos_range(
     cx: &Context,
@@ -46,7 +48,7 @@ fn _ui_to_data_pos_range(
     // Scale points to fit within `(x,y) = ([0..=max], [0..=1])`
     let y = (height - ui_point.y) / height;
     let offset_data = range.start() * max;
-    let scale = (range.end() - range.start()) * max;
+    let scale = range.width() * max;
     let x = ((ui_point.x / width) * scale) + offset_data;
     Vec2::new(x, y)
 }
@@ -69,7 +71,7 @@ fn _data_to_ui_pos_range(
     // maximum X of our MSEG.
     let offset = range.start() * max;
     // Calculate the x-zoom scale to apply to points
-    let scale = 1f32 / ((range.end() - range.start()) * max);
+    let scale = 1f32 / (range.width() * max);
     let x = ((point.x - offset) * scale) * width;
     let relative = Vec2::new(x, y);
     // adjust to be absolute by adding the container coords

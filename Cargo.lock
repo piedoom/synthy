@@ -974,7 +974,7 @@ checksum = "e1bcdd74c20ad5d95aacd60ef9ba40fdf77f767051040541df557b7a9b2a2121"
 [[package]]
 name = "nih_plug"
 version = "0.0.0"
-source = "git+https://github.com/robbert-vdh/nih-plug#c1ca97c78c07a12dc3127c41803e552346113fde"
+source = "git+https://github.com/robbert-vdh/nih-plug#33db034bc2aea5fc42e2245a827df3d11fb72b15"
 dependencies = [
  "assert_no_alloc",
  "atomic_float",
@@ -996,7 +996,7 @@ dependencies = [
 [[package]]
 name = "nih_plug_derive"
 version = "0.1.0"
-source = "git+https://github.com/robbert-vdh/nih-plug#c1ca97c78c07a12dc3127c41803e552346113fde"
+source = "git+https://github.com/robbert-vdh/nih-plug#33db034bc2aea5fc42e2245a827df3d11fb72b15"
 dependencies = [
  "quote",
  "syn",
@@ -1842,7 +1842,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 [[package]]
 name = "vizia"
 version = "0.1.0"
-source = "git+https://github.com/vizia/vizia#13ec3670860139da51e05a2de2aa85cdb84afc1d"
+source = "git+https://github.com/vizia/vizia#45b9539e906fa7e31f4961a251b854893117bc85"
 dependencies = [
  "vizia_baseview",
  "vizia_core",
@@ -1851,7 +1851,7 @@ dependencies = [
 [[package]]
 name = "vizia_baseview"
 version = "0.1.0"
-source = "git+https://github.com/vizia/vizia#13ec3670860139da51e05a2de2aa85cdb84afc1d"
+source = "git+https://github.com/vizia/vizia#45b9539e906fa7e31f4961a251b854893117bc85"
 dependencies = [
  "baseview",
  "femtovg",
@@ -1864,7 +1864,7 @@ dependencies = [
 [[package]]
 name = "vizia_core"
 version = "0.1.0"
-source = "git+https://github.com/vizia/vizia#13ec3670860139da51e05a2de2aa85cdb84afc1d"
+source = "git+https://github.com/vizia/vizia#45b9539e906fa7e31f4961a251b854893117bc85"
 dependencies = [
  "bitflags",
  "cssparser",
@@ -1886,7 +1886,7 @@ dependencies = [
 [[package]]
 name = "vizia_derive"
 version = "0.1.0"
-source = "git+https://github.com/vizia/vizia#13ec3670860139da51e05a2de2aa85cdb84afc1d"
+source = "git+https://github.com/vizia/vizia#45b9539e906fa7e31f4961a251b854893117bc85"
 dependencies = [
  "proc-macro2",
  "quote",

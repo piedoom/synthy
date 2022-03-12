@@ -70,7 +70,8 @@ where
                 .on_remove_point(|cx, index| cx.emit(MsegInternalEvent::OnRemovePoint { index }))
                 .on_insert_point(|cx, index, point| {
                     cx.emit(MsegInternalEvent::OnInsertPoint { index, point })
-                });
+                })
+                .class("graph");
 
             Zoomer::new(cx, range.clone())
                 .on_changing_start(|cx, x| cx.emit(MsegInternalEvent::OnChangingRangeStart(x)))

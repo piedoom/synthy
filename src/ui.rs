@@ -1,10 +1,4 @@
-use crate::{
-    widgets::{
-        axis::{Axis, AxisHandle},
-        mseg::{Mseg, MsegHandle},
-    },
-    SynthyEnvParam, SynthyFloatParam, SynthyParams,
-};
+use crate::{widgets::*, SynthyEnvParam, SynthyFloatParam, SynthyParams};
 use glam::Vec2;
 use nih_plug::prelude::*;
 use std::{ops::RangeInclusive, pin::Pin, sync::Arc};
@@ -193,8 +187,24 @@ pub fn ui(cx: &mut Context, params: Pin<Arc<SynthyParams>>, context: Arc<dyn Gui
     .build(cx);
 
     VStack::new(cx, |cx| {
-        Axis::new(cx, AppData::xy_data)
-            .on_changing_point(|cx, point| cx.emit(SynthyEvent::XyControl { point }));
+        SliderDiscrete::new(
+            cx,
+            AppData::params.map(|x| x.a_ratio.normalized_value()),
+            8,
+            true,
+        );
+
+        HStack::new(cx, |cx| {
+            XyPad::new(cx, AppData::xy_data)
+                .on_changing_point(|cx, point| cx.emit(SynthyEvent::XyControl { point }));
+            SliderDiscrete::new(
+                cx,
+                AppData::params.map(|x| x.a_ratio.normalized_value()),
+                8,
+                false,
+            );
+        });
+
         HStack::new(cx, |cx| {
             knob(
                 cx,
