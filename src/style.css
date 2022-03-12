@@ -29,6 +29,12 @@ zoomer .handle {
     background-color: #6e2197;
     border-color: #ffffff5b;
 }
+axis {
+    background-color: #170a1f;
+    border-color: #ffffff5b;
+    width: 200px;
+    height: 200px;
+}
 label {
     width: 1s;
     color: #ffffff;

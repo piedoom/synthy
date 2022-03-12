@@ -5,7 +5,7 @@ use std::{cmp::Ordering, ops::RangeInclusive};
 use vizia::*;
 
 use super::{
-    util::{data_to_ui_pos, ui_to_data_pos},
+    util::{data_to_ui_pos_range, ui_to_data_pos_range},
     PointCallback,
 };
 
@@ -20,13 +20,21 @@ where
     P: Lens<Target = CurvePoints>,
     R: Lens<Target = RangeInclusive<f32>>,
 {
+    /// A [`Lens`] of type `P` representing the points on an envelope. Points
+    /// have a minimum and maximum float range of (0,0) and (inf, 1)
+    /// respectively
     points: P,
+    /// A [`Lens`] of type `R` representing the section of the graph of which we
+    /// are zoomed. This can be any set of numbers between 0 and 1 inclusive
+    /// where the start is less than the end.
     range: R,
-    /// The max length of this MSEG, usually representing `f32` seconds. (The
-    /// minimum is always `0`).
+    /// the max `x`, in `f32` seconds, of the envelope visualization. For
+    /// example, if the max is `8.0`, the maximum length of the envelope is then
+    /// 8 seconds.
     max: f32,
-    /// The temporary value of the currently hovered or active point
+    /// The index of the currently hovered or pressed graph point
     active_point_id: Option<usize>,
+    /// Whether we are in the process of dragging a graph point
     is_dragging_point: bool,
     on_changing_point: Option<PointCallback>,
     on_remove_point: Option<Box<dyn Fn(&mut Context, usize)>>,
@@ -38,6 +46,21 @@ where
     P: Lens<Target = CurvePoints>,
     R: Lens<Target = RangeInclusive<f32>>,
 {
+    /// Create a new `MsegGraph`
+    ///
+    /// # Parameters
+    ///
+    /// * `cx` - the current [`Context`]
+    /// * `points` - a [`Lens`] with a target of [`CurvePoints`] representing
+    ///   the points on an envelope. Points have a minimum and maximum float
+    ///   range of (0,0) and (inf, 1) respectively
+    /// * `range` - a [`Lens`] with a target of [`RangeInclusive<f32>`]
+    ///   representing the section of the graph of which we are zoomed. This can
+    ///   be any set of numbers between 0 and 1 inclusive where the start is
+    ///   less than the end.
+    /// * `max` - the max `x`, in `f32` seconds, of the envelope visualization.
+    ///   For example, if the max is `8.0`, the maximum length of the envelope
+    ///   is then 8 seconds.
     pub fn new(cx: &mut Context, points: P, range: R, max: f32) -> Handle<MsegGraph<P, R>> {
         Self {
             points,
@@ -65,7 +88,7 @@ where
     fn event(&mut self, cx: &mut Context, event: &mut vizia::Event) {
         let points = self.points.get(cx).clone();
         let ui_points = points.iter().map(|point| {
-            data_to_ui_pos(
+            data_to_ui_pos_range(
                 cx,
                 Vec2::new(point.x, point.y),
                 self.range.clone(),
@@ -99,20 +122,25 @@ where
                         _ => (),
                     }
                 }
+                // Release the current context and signal that we are no longer
+                // dragging a point
                 WindowEvent::MouseUp(button) => {
                     if *button == MouseButton::Left {
                         cx.release();
                         self.is_dragging_point = false;
                     }
                 }
+                // Perform dragging actions depending on state
                 WindowEvent::MouseMove(x, y) => {
                     let current_pos = Vec2::new(*x, *y);
+                    // Drag around the point to match the current cursor
+                    // position
                     if self.is_dragging_point {
                         // Up to the user to drag the current point around
                         if let Some(callback) = self.on_changing_point.take() {
                             let active_id = self.active_point_id.unwrap();
                             let mut new_v = if active_id != 0 {
-                                ui_to_data_pos(cx, &current_pos, self.range.clone(), self.max)
+                                ui_to_data_pos_range(cx, &current_pos, self.range.clone(), self.max)
                             } else {
                                 Vec2::ZERO
                             };
@@ -120,7 +148,8 @@ where
                                 new_v.y = 0f32;
                             }
 
-                            // Clamp the point (and check for left and right bounds)
+                            // Clamp the point (and check for left and right
+                            // bounds)
                             let right_bound =
                                 points.get(active_id + 1).map(|p| p.x).unwrap_or(self.max)
                                     - MIN_RESOLUTION;
@@ -132,7 +161,9 @@ where
                             (callback)(cx, active_id, new_v);
                             self.on_changing_point = Some(callback);
                         } // asdasdasdasd
-                    } else {
+                    }
+                    // If not dragging, perform some other checks
+                    else {
                         // determine if we are hovering within the range of a
                         //point if we are not currently dragging points
                         let mut filtered_points: Vec<(usize, Vec2)> = ui_points
@@ -145,12 +176,17 @@ where
                                 }
                             })
                             .collect();
+                        // Sort points by shortest to furthest distance This is
+                        // important in the case that multiple hovered points
+                        // exist that we select the one closest to the cursor.
                         filtered_points.sort_by(|a, b| {
+                            // Use distance squared to avoid `sqrt` operations
                             a.1.distance_squared(current_pos)
                                 .partial_cmp(&b.1.distance_squared(current_pos))
                                 .unwrap_or(Ordering::Equal)
                         });
-                        // Store our point ID
+                        // Store our point ID in the case that it exists (i.e.,
+                        // our pointer is close enough to at least one node)
                         match filtered_points.first() {
                             Some((closest_point_id, ..)) => {
                                 self.active_point_id = Some(*closest_point_id);
@@ -196,7 +232,7 @@ where
             .map(|point| {
                 (
                     point.0,
-                    data_to_ui_pos(
+                    data_to_ui_pos_range(
                         cx,
                         Vec2::new(point.1.x, point.1.y),
                         self.range.clone(),
@@ -240,6 +276,14 @@ where
                     Paint::color(active_color.into()).with_line_width(2f32),
                 );
             }
+        }
+
+        // check to see if we are hovering near an interpolated point
+        if self.active_point_id.is_none() {
+            // TODO:  todo!()
+            // let mouse = Vec2::new(cx.mouse.cursorx, cx.mouse.cursory); let
+            // mouse_data_pos = ui_to_data_pos(cx, &mouse, self.range,
+            // self.max); let point_at_x = lerp(left., right.y, normalized);
         }
     }
 }

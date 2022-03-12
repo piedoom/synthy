@@ -1,7 +1,3 @@
-use std::ops::{Deref, DerefMut, RangeInclusive, Sub};
-
-use fundsp::math::lerp;
-
 /// Interpolate between two values with an adjustable curve
 ///
 /// # Parameters
@@ -31,75 +27,14 @@ pub fn xlerp(a: f32, b: f32, t: f32, curve: f32) -> f32 {
                 false => 1f32 / (1f32 - f32::abs(curve)),
             };
             let adjusted = t.powf(exp);
-            lerp(a, b, adjusted)
+            fundsp::math::lerp(a, b, adjusted)
         }
-    }
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct CurvePoints(Vec<CurvePoint>);
-
-impl CurvePoints {
-    pub fn new(points: Vec<CurvePoint>) -> Self {
-        Self(points)
-    }
-}
-
-impl Deref for CurvePoints {
-    type Target = Vec<CurvePoint>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for CurvePoints {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-/// A point with an adjustable single-control exponential curve
-#[derive(Copy, Clone, serde::Serialize, serde::Deserialize)]
-pub struct CurvePoint {
-    pub x: f32,
-    pub y: f32,
-    /// Defines the exponential curve between the current and last point
-    pub curve: f32,
-}
-
-impl From<(f32, f32)> for CurvePoint {
-    fn from((x, y): (f32, f32)) -> Self {
-        Self { x, y, curve: 0f32 }
-    }
-}
-
-impl From<(f32, f32, f32)> for CurvePoint {
-    fn from((x, y, curve): (f32, f32, f32)) -> Self {
-        Self { x, y, curve }
-    }
-}
-
-pub trait RangeExt<T>
-where
-    T: Sub<Output = T> + Copy,
-{
-    fn width(&self) -> T;
-}
-
-impl<T> RangeExt<T> for RangeInclusive<T>
-where
-    T: Sub<Output = T> + Copy,
-{
-    fn width(&self) -> T {
-        *self.end() - *self.start()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use assert_approx_eq::assert_approx_eq;
 
     #[test]
     fn linear_xlerp() {
@@ -133,15 +68,5 @@ mod tests {
         let v = xlerp(0f32, 2f32, 0.6f32, -1.0f32);
         // Obtain the approximate value from Desmos to compare
         assert_eq!(v, 0f32);
-    }
-
-    #[test]
-    fn positive_range_width() {
-        assert_approx_eq!((0.2f32..=0.8).width(), 0.6);
-    }
-
-    #[test]
-    fn negative_range_width() {
-        assert_approx_eq!((-0.2f32..=0.2).width(), 0.4);
     }
 }

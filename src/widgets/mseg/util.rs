@@ -3,26 +3,26 @@ use std::ops::RangeInclusive;
 use vizia::*;
 
 /// Convert a screen value to its data position
-pub fn ui_to_data_pos(
+pub fn ui_to_data_pos_range(
     cx: &Context,
     ui_point: &Vec2,
     range_data: impl Lens<Target = RangeInclusive<f32>>,
     max_data: f32,
 ) -> Vec2 {
-    _ui_to_data_pos(
+    _ui_to_data_pos_range(
         cx.cache.get_bounds(cx.current),
         *ui_point,
         range_data.get(cx).clone(),
         max_data,
     )
 }
-pub fn data_to_ui_pos(
+pub fn data_to_ui_pos_range(
     cx: &Context,
     point: Vec2,
     range_data: impl Lens<Target = RangeInclusive<f32>>,
     max: f32,
 ) -> Vec2 {
-    _data_to_ui_pos(
+    _data_to_ui_pos_range(
         cx.cache.get_bounds(cx.current),
         point,
         range_data.get(cx).clone(),
@@ -30,14 +30,15 @@ pub fn data_to_ui_pos(
     )
 }
 
-fn _ui_to_data_pos(
+fn _ui_to_data_pos_range(
     bounds: BoundingBox,
     ui_point: Vec2,
     range: RangeInclusive<f32>,
     max: f32,
 ) -> Vec2 {
     let (width, height) = (bounds.w, bounds.h);
-    // Assume `ui_point` is an absolute coordinate. We must convert it to relative coordinates
+    // Assume `ui_point` is an absolute coordinate. We must convert it to
+    // relative coordinates
     let mut ui_point = ui_point;
     let offset = { Vec2::new(bounds.x, bounds.y) };
     // Convert to relative point
@@ -50,17 +51,22 @@ fn _ui_to_data_pos(
     Vec2::new(x, y)
 }
 
-fn _data_to_ui_pos(bounds: BoundingBox, point: Vec2, range: RangeInclusive<f32>, max: f32) -> Vec2 {
+fn _data_to_ui_pos_range(
+    bounds: BoundingBox,
+    point: Vec2,
+    range: RangeInclusive<f32>,
+    max: f32,
+) -> Vec2 {
     let (width, height) = (bounds.w, bounds.h);
     // y value is a simple scale
     let y = height - (point.y * height);
     // x value requires us to calculate our zoomed position TODO: Zoom too
 
-    // Calculate the x-offset determined by the current view zoom window
-    // This value shifts points to the left and right We calculate the
-    // offset by getting the view's starting x value, which is normalized.
-    // We then see how much time that offsets by multiplying that normalized
-    // value times the maximum X of our MSEG.
+    // Calculate the x-offset determined by the current view zoom window This
+    // value shifts points to the left and right We calculate the offset by
+    // getting the view's starting x value, which is normalized. We then see how
+    // much time that offsets by multiplying that normalized value times the
+    // maximum X of our MSEG.
     let offset = range.start() * max;
     // Calculate the x-zoom scale to apply to points
     let scale = 1f32 / ((range.end() - range.start()) * max);
@@ -69,6 +75,14 @@ fn _data_to_ui_pos(bounds: BoundingBox, point: Vec2, range: RangeInclusive<f32>,
     // adjust to be absolute by adding the container coords
     let offset = { Vec2::new(bounds.x, bounds.y) };
     relative + offset
+}
+
+/// Takes a bounding box and point, with all coordinates being absolute. Returns
+/// a normalized [`Vec2`] between `(-1,-1)..=(1,1)` that maps to the position of the
+/// cursor on the rect.
+#[inline]
+fn ui_to_data(rect: BoundingBox, ui_point: Vec2) -> Vec2 {
+    todo!()
 }
 
 #[cfg(test)]
@@ -88,7 +102,7 @@ mod tests {
     #[test]
     fn gets_ui_point_from_data() {
         let rect = rect();
-        let ui_point = _data_to_ui_pos(rect, Vec2::new(0.6, 0.5), 0.2..=0.4, 2f32);
+        let ui_point = _data_to_ui_pos_range(rect, Vec2::new(0.6, 0.5), 0.2..=0.4, 2f32);
         assert_eq!(ui_point.x.round(), 110f32);
         assert_eq!(ui_point.y.round(), 60f32);
     }
@@ -96,7 +110,7 @@ mod tests {
     #[test]
     fn gets_data_point_from_ui() {
         let rect = rect();
-        let data_point = _ui_to_data_pos(rect, Vec2::new(110f32, 60f32), 0.2..=0.4, 2f32);
+        let data_point = _ui_to_data_pos_range(rect, Vec2::new(110f32, 60f32), 0.2..=0.4, 2f32);
         assert_approx_eq!(data_point.x, 0.6);
         assert_approx_eq!(data_point.y, 0.5);
     }

@@ -1,5 +1,8 @@
 use crate::{
-    widgets::mseg::{Mseg, MsegHandle},
+    widgets::{
+        axis::{Axis, AxisHandle},
+        mseg::{Mseg, MsegHandle},
+    },
     SynthyEnvParam, SynthyFloatParam, SynthyParams,
 };
 use glam::Vec2;
@@ -18,6 +21,7 @@ pub struct AppData {
     a_env_zoom_view: RangeInclusive<f32>,
     b_env_zoom_view: RangeInclusive<f32>,
     noise_env_zoom_view: RangeInclusive<f32>,
+    xy_data: Vec2,
 }
 
 #[derive(Clone, Copy)]
@@ -47,6 +51,9 @@ pub enum SynthyEvent {
     RemovePoint {
         param: SynthyEnvParam,
         index: usize,
+    },
+    XyControl {
+        point: Vec2,
     },
 }
 
@@ -147,6 +154,7 @@ impl Model for AppData {
                         param.remove(index);
                     }
                 }
+                SynthyEvent::XyControl { point } => self.xy_data = point,
             }
         }
     }
@@ -180,10 +188,13 @@ pub fn ui(cx: &mut Context, params: Pin<Arc<SynthyParams>>, context: Arc<dyn Gui
         a_env_zoom_view: 0f32..=1f32,
         b_env_zoom_view: 0f32..=1f32,
         noise_env_zoom_view: 0f32..=1f32,
+        xy_data: Vec2::ZERO,
     }
     .build(cx);
 
     VStack::new(cx, |cx| {
+        Axis::new(cx, AppData::xy_data)
+            .on_changing_point(|cx, point| cx.emit(SynthyEvent::XyControl { point }));
         HStack::new(cx, |cx| {
             knob(
                 cx,

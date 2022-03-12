@@ -1,13 +1,9 @@
 //! Multi-stage envelope generator widget
 
 pub(crate) mod graph;
-pub(crate) mod ticks;
 pub(crate) mod util;
 
-use self::{
-    graph::{MsegGraph, MsegGraphHandle},
-    ticks::MsegTicks,
-};
+use self::graph::{MsegGraph, MsegGraphHandle};
 use std::{marker::PhantomData, ops::RangeInclusive};
 
 use super::zoomer::{Zoomer, ZoomerHandle};
@@ -66,24 +62,20 @@ where
                 .get(cx.current)
                 .cloned()
                 .unwrap_or_default();
-            ZStack::new(cx, |cx| {
-                MsegGraph::new(cx, points, range.clone(), max)
-                    .background_color(background_color)
-                    .on_changing_point(|cx, index, point| {
-                        cx.emit(MsegInternalEvent::OnChangingPoint { index, point })
-                    })
-                    .on_remove_point(|cx, index| {
-                        cx.emit(MsegInternalEvent::OnRemovePoint { index })
-                    })
-                    .on_insert_point(|cx, index, point| {
-                        cx.emit(MsegInternalEvent::OnInsertPoint { index, point })
-                    });
-                MsegTicks::new(cx, range.clone(), max);
-            });
+            MsegGraph::new(cx, points, range.clone(), max)
+                .background_color(background_color)
+                .on_changing_point(|cx, index, point| {
+                    cx.emit(MsegInternalEvent::OnChangingPoint { index, point })
+                })
+                .on_remove_point(|cx, index| cx.emit(MsegInternalEvent::OnRemovePoint { index }))
+                .on_insert_point(|cx, index, point| {
+                    cx.emit(MsegInternalEvent::OnInsertPoint { index, point })
+                });
 
             Zoomer::new(cx, range.clone())
                 .on_changing_start(|cx, x| cx.emit(MsegInternalEvent::OnChangingRangeStart(x)))
-                .on_changing_end(|cx, x| cx.emit(MsegInternalEvent::OnChangingRangeEnd(x)));
+                .on_changing_end(|cx, x| cx.emit(MsegInternalEvent::OnChangingRangeEnd(x)))
+                .on_changing_both(|cx, x| cx.emit(MsegInternalEvent::OnChangingRangeBoth(x)));
         })
     }
 }
